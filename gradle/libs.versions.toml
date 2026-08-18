@@ -1,0 +1,13 @@
+[versions]
+agp = "8.9.2"
+kotlin = "2.1.0"
+oboe = "1.9.3"
+junit = "4.13.2"
+
+[libraries]
+oboe = { group = "com.google.oboe", name = "oboe", version.ref = "oboe" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

@@ -31,7 +31,7 @@ O iPhone continua sendo o aparelho onde YouTube Music e Waze rodam. Isso evita d
 
 ## Instalação
 
-O APK pronto fica em [`release/C3-Media-1.2.0-K00E.apk`](release/C3-Media-1.2.0-K00E.apk). O passo a passo completo está em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+O APK assinado da versão 1.2.0 é distribuído separadamente do código-fonte. O passo a passo completo está em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 
 ## Compatibilidade alvo
 

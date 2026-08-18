@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">C3 Media</string>
+    <string name="admin_description">Mantém a central C3 Media em modo quiosque.</string>
+    <string name="notification_title">C3 Media ativa</string>
+    <string name="notification_text">Aguardando o iPhone em Citroën C3</string>
+    <string name="notification_channel">Receptor do iPhone</string>
+</resources>
