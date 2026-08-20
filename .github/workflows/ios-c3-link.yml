@@ -84,3 +84,4 @@ jobs:
             gh release create v1.8.0 ios/C3Link/C3-Link-1.8.0-unsigned.ipa \
               --title "C3 Media 1.8.0" \
               --notes "C3 Media 1.8.0 final para o tablet K00E e C3 Link 1.8.0 sem assinatura para instalação pelo Sideloadly."
+          fi
