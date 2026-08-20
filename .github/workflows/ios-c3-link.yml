@@ -1,0 +1,61 @@
+name: Build C3 Link iPhone
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/C3Link/**"
+      - "C3-Link-1.6.0-github-source.zip"
+      - ".github/workflows/ios-c3-link.yml"
+  pull_request:
+    paths:
+      - "ios/C3Link/**"
+      - ".github/workflows/ios-c3-link.yml"
+  workflow_dispatch:
+
+jobs:
+  unsigned-ipa:
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract C3 Link source
+        run: unzip -q -o C3-Link-1.6.0-github-source.zip -d .
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        working-directory: ios/C3Link
+        run: xcodegen generate
+
+      - name: Compile without signing
+        working-directory: ios/C3Link
+        run: |
+          xcodebuild \
+            -project C3Link.xcodeproj \
+            -scheme C3Link \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+      - name: Package unsigned IPA
+        working-directory: ios/C3Link
+        run: |
+          app_path="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app_path"
+          mkdir -p Payload
+          cp -R "$app_path" Payload/
+          /usr/bin/zip -qry C3-Link-1.6.0-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: C3-Link-1.6.0-unsigned
+          path: ios/C3Link/C3-Link-1.6.0-unsigned.ipa
+          if-no-files-found: error
