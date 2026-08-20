@@ -55,7 +55,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")" = "1.7.0"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")" = "3"
           test "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' "$app_path/Info.plist")" = "location"
-          /usr/bin/lipo -verify_arch arm64 "$executable"
+          /usr/bin/lipo "$executable" -verify_arch arm64
           /usr/bin/file "$executable"
 
       - name: Package unsigned IPA
