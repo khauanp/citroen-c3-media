@@ -16,6 +16,8 @@ on:
 jobs:
   unsigned-ipa:
     runs-on: macos-15
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,6 +46,18 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             build
 
+      - name: Validate iPhone build
+        working-directory: ios/C3Link
+        run: |
+          app_path="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app_path"
+          executable="$app_path/C3 Link"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")" = "1.7.0"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")" = "3"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' "$app_path/Info.plist")" = "location"
+          /usr/bin/lipo -verify_arch arm64 "$executable"
+          /usr/bin/file "$executable"
+
       - name: Package unsigned IPA
         working-directory: ios/C3Link
         run: |
@@ -59,3 +73,15 @@ jobs:
           name: C3-Link-1.7.0-unsigned
           path: ios/C3Link/C3-Link-1.7.0-unsigned.ipa
           if-no-files-found: error
+
+      - name: Publish public GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.7.0 >/dev/null 2>&1; then
+            gh release upload v1.7.0 ios/C3Link/C3-Link-1.7.0-unsigned.ipa --clobber
+          else
+            gh release create v1.7.0 ios/C3Link/C3-Link-1.7.0-unsigned.ipa \
+              --title "C3 Media 1.7.0" \
+              --notes "C3 Media 1.7.0 para o tablet K00E e C3 Link 1.7.0 sem assinatura para instalação pelo Sideloadly."
+          fi
