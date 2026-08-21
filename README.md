@@ -31,7 +31,7 @@ O iPhone continua sendo o aparelho onde YouTube Music e Waze rodam. Isso evita d
 
 ## Instalação
 
-A manutenção 1.8.5 do tablet é reconstruída diretamente sobre o APK real 1.8.1, mantendo a interface e o player originais. Ela corrige o filtro invertido da rota da 1.8.4 e impede coordenadas extremas de gerar quadrados pretos na GPU do K00E. O C3 Link do iPhone permanece na 1.8.4. Veja o escopo e o roteiro de validação em [`docs/MAINTENANCE-1.8.5.md`](docs/MAINTENANCE-1.8.5.md).
+A 1.8.6 corrige os dois últimos defeitos de rota: o C3 Link mantém a geometria completa das ruas sem amostragem uniforme, e o K00E desenha a linha até a borda em qualquer rotação sem aceitar coordenadas extremas. O tablet continua reconstruído diretamente sobre o APK real 1.8.1, mantendo interface e player. Veja a análise e o roteiro seguro em [`docs/FINAL-ROUTE-1.8.6.md`](docs/FINAL-ROUTE-1.8.6.md).
 
 ## Compatibilidade alvo
 
@@ -48,7 +48,7 @@ Este APK contém somente bibliotecas x86 de 32 bits de propósito: é uma versã
 
 ## Build do código Android antigo
 
-> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.5.
+> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.6.
 
 Pré-requisitos: JDK 17, Android SDK 36, Android SDK Platform 21, Build Tools 35+, CMake e NDK `27.0.12077973`.
 

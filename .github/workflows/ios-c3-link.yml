@@ -5,13 +5,13 @@ on:
     branches: [main]
     paths:
       - "ios/C3Link/**"
-      - "tools/verify_ios_1_8_3_scope.py"
+      - "tools/verify_ios_1_8_6_scope.py"
       - "C3-Link-1.8.1-github-source.zip"
       - ".github/workflows/ios-c3-link.yml"
   pull_request:
     paths:
       - "ios/C3Link/**"
-      - "tools/verify_ios_1_8_3_scope.py"
+      - "tools/verify_ios_1_8_6_scope.py"
       - "C3-Link-1.8.1-github-source.zip"
       - ".github/workflows/ios-c3-link.yml"
   workflow_dispatch:
@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Prove the 1.8.1 iPhone interface is unchanged
-        run: python3 tools/verify_ios_1_8_3_scope.py C3-Link-1.8.1-github-source.zip ios/C3Link
+        run: python3 tools/verify_ios_1_8_6_scope.py C3-Link-1.8.1-github-source.zip ios/C3Link
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -70,8 +70,8 @@ jobs:
           app_path="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' -print -quit)"
           test -n "$app_path"
           executable="$app_path/C3 Link"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")" = "1.8.4"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")" = "8"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_path/Info.plist")" = "1.8.6"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_path/Info.plist")" = "9"
           test "$(/usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes:0' "$app_path/Info.plist")" = "location"
           test -f "$app_path/AppIcon60x60@2x.png" || test -f "$app_path/Assets.car"
           /usr/bin/lipo "$executable" -verify_arch arm64
@@ -84,13 +84,13 @@ jobs:
           test -n "$app_path"
           mkdir -p Payload
           cp -R "$app_path" Payload/
-          /usr/bin/zip -qry C3-Link-1.8.4-unsigned.ipa Payload
+          /usr/bin/zip -qry C3-Link-1.8.6-unsigned.ipa Payload
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Link-1.8.4-unsigned
-          path: ios/C3Link/C3-Link-1.8.4-unsigned.ipa
+          name: C3-Link-1.8.6-unsigned
+          path: ios/C3Link/C3-Link-1.8.6-unsigned.ipa
           if-no-files-found: error
 
       - name: Publish public GitHub release
@@ -100,10 +100,10 @@ jobs:
           if [[ "${GITHUB_EVENT_NAME}" != "push" || "${GITHUB_REF}" != "refs/heads/main" ]]; then
             exit 0
           fi
-          if gh release view v1.8.4 >/dev/null 2>&1; then
-            gh release upload v1.8.4 ios/C3Link/C3-Link-1.8.4-unsigned.ipa --clobber
+          if gh release view v1.8.6 >/dev/null 2>&1; then
+            gh release upload v1.8.6 ios/C3Link/C3-Link-1.8.6-unsigned.ipa --clobber
           else
-            gh release create v1.8.4 ios/C3Link/C3-Link-1.8.4-unsigned.ipa \
-              --title "C3 Media 1.8.4" \
-              --notes "Manutenção baseada no APK 1.8.1: interface e player preservados; rota azul desenhada por segmentos no K00E e buffers de áudio/vídeo mais tolerantes."
+            gh release create v1.8.6 ios/C3Link/C3-Link-1.8.6-unsigned.ipa \
+              --title "C3 Media 1.8.6" \
+              --notes "Versão final de rota: geometria completa das ruas no C3 Link e envelope de desenho válido em qualquer rotação no K00E, preservando a interface e o player da 1.8.1."
           fi

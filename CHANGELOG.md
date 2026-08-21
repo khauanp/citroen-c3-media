@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.6 — 2026-08-21
+
+- mantém no C3 Link a geometria completa devolvida pelo OSRM, em vez de reduzir toda rota longa para 1.200 pontos por intervalo fixo;
+- separa a geometria completa usada no mapa/GPS da geometria compactada usada somente quando o pacote ultrapassa o limite seguro;
+- substitui a amostragem uniforme por Ramer–Douglas–Peucker em metros, preservando curvas e esquinas quando uma compactação for inevitável;
+- amplia o envelope seguro do renderizador Android para cobrir os quatro cantos da tela em qualquer rotação do mapa;
+- evita tanto atalhos retos entre ruas quanto o encerramento prematuro da linha dentro da tela;
+- preserva o design, player, áudio, espelhamento, GPS, tiles e bibliotecas da manutenção anterior.
+
 ## 1.8.5 — 2026-08-21
 
 - corrige a regressão da 1.8.4 que invertia o filtro de segmentos e descartava a rota visível;

@@ -23,6 +23,9 @@ enum NavigationServiceError: LocalizedError {
 final class OpenNavigationService {
     static let userAgent = "C3Link/2.2 (personal in-car navigation; https://github.com/khauanp/citroen-c3-media)"
     static let defaultRoutingEndpoint = "https://router.project-osrm.org"
+    private static let maximumTransportRoutePoints = 10_000
+    private static let preferredTransportPolylineBytes = 26_000
+    private static let maximumTransportPolylineBytes = 28_000
 
     private let session: URLSession
 
@@ -270,19 +273,27 @@ final class OpenNavigationService {
         guard decoded.code == "Ok", let selected = decoded.routes.first else {
             throw NavigationServiceError.noRoute
         }
-        var decodedCoordinates = PolylineEncoder.decode(selected.geometry, precision: 5)
-        guard decodedCoordinates.count >= 2 else { throw NavigationServiceError.invalidResponse }
+        let fullCoordinates = PolylineEncoder.decode(selected.geometry, precision: 5)
+        guard fullCoordinates.count >= 2 else { throw NavigationServiceError.invalidResponse }
 
         var encoded = selected.geometry
-        if decodedCoordinates.count > 1_200 || encoded.utf8.count > 8_000 {
-            decodedCoordinates = PolylineEncoder.simplify(decodedCoordinates, maximumPoints: 1_200)
-            encoded = PolylineEncoder.encode(decodedCoordinates, precision: 5)
+        var transportCoordinates = fullCoordinates
+        if transportCoordinates.count > Self.maximumTransportRoutePoints {
+            transportCoordinates = PolylineEncoder.simplify(
+                fullCoordinates,
+                maximumPoints: Self.maximumTransportRoutePoints
+            )
+            encoded = PolylineEncoder.encode(transportCoordinates, precision: 5)
         }
-        var pointLimit = decodedCoordinates.count
-        while encoded.utf8.count > 10_000 && pointLimit > 200 {
+
+        var pointLimit = min(transportCoordinates.count, Self.maximumTransportRoutePoints)
+        while encoded.utf8.count > Self.preferredTransportPolylineBytes && pointLimit > 200 {
             pointLimit = max(200, pointLimit * 3 / 4)
-            decodedCoordinates = PolylineEncoder.simplify(decodedCoordinates, maximumPoints: pointLimit)
-            encoded = PolylineEncoder.encode(decodedCoordinates, precision: 5)
+            transportCoordinates = PolylineEncoder.simplify(fullCoordinates, maximumPoints: pointLimit)
+            encoded = PolylineEncoder.encode(transportCoordinates, precision: 5)
+        }
+        guard encoded.utf8.count <= Self.maximumTransportPolylineBytes else {
+            throw NavigationServiceError.invalidResponse
         }
         let steps = selected.legs.flatMap(\.steps).compactMap { step -> NavigationStep? in
             guard step.maneuver.location.count == 2 else { return nil }
@@ -300,7 +311,7 @@ final class OpenNavigationService {
         }
         return NavigationRoute(
             encodedPolyline: encoded,
-            coordinates: decodedCoordinates,
+            coordinates: fullCoordinates,
             distanceMeters: selected.distance,
             durationSeconds: selected.duration,
             steps: steps
