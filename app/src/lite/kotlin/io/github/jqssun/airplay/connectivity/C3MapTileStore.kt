@@ -38,7 +38,7 @@ class C3MapTileStore(context: Context) {
         val now = SystemClock.elapsedRealtime()
         keys.take(MAX_VISIBLE_TILES).forEach { raw ->
             val key = raw.normalized() ?: return@forEach
-            if (tile(key) != null || unavailableUntil.getOrDefault(key, 0L) > now) return@forEach
+            if (tile(key) != null || (unavailableUntil[key] ?: 0L) > now) return@forEach
             synchronized(loading) {
                 if (!loading.add(key)) return@forEach
             }
