@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.5 — 2026-08-21
+
+- corrige a regressão da 1.8.4 que invertia o filtro de segmentos e descartava a rota visível;
+- impede que coordenadas muito distantes cheguem ao `Canvas.drawLine`, eliminando os quadrados pretos produzidos pela GPU antiga do K00E;
+- desenha em azul somente segmentos com os dois pontos dentro de uma margem segura ao redor da tela, mantendo o `Path` original como fallback;
+- mantém sem novas alterações o design, o player, o mapa, o GPS, o áudio e o espelhamento que já funcionavam na 1.8.4;
+- continua sendo reconstruída diretamente sobre o APK real C3 Media 1.8.1.
+
 ## 1.8.4 — 2026-08-21
 
 - mantém integralmente os recursos e a interface da C3 Media 1.8.1;

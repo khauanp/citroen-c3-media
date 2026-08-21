@@ -31,7 +31,7 @@ O iPhone continua sendo o aparelho onde YouTube Music e Waze rodam. Isso evita d
 
 ## Instalação
 
-A manutenção 1.8.4 do tablet é reconstruída diretamente sobre o APK real 1.8.1, mantendo a interface e o player originais. O C3 Link 1.8.4 continua baseado no fonte exato do iPhone 1.8.1. Veja o escopo e o roteiro de validação em [`docs/MAINTENANCE-1.8.4.md`](docs/MAINTENANCE-1.8.4.md).
+A manutenção 1.8.5 do tablet é reconstruída diretamente sobre o APK real 1.8.1, mantendo a interface e o player originais. Ela corrige o filtro invertido da rota da 1.8.4 e impede coordenadas extremas de gerar quadrados pretos na GPU do K00E. O C3 Link do iPhone permanece na 1.8.4. Veja o escopo e o roteiro de validação em [`docs/MAINTENANCE-1.8.5.md`](docs/MAINTENANCE-1.8.5.md).
 
 ## Compatibilidade alvo
 
@@ -48,7 +48,7 @@ Este APK contém somente bibliotecas x86 de 32 bits de propósito: é uma versã
 
 ## Build do código Android antigo
 
-> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.4.
+> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.5.
 
 Pré-requisitos: JDK 17, Android SDK 36, Android SDK Platform 21, Build Tools 35+, CMake e NDK `27.0.12077973`.
 
@@ -59,7 +59,7 @@ git submodule update --init --recursive
 
 O APK sai em `app/build/outputs/apk/debug/app-debug.apk`.
 
-O workflow `.github/workflows/apk.yml` baixa o APK 1.8.1 exato, confere seu SHA-256, aplica somente o desenho direto da rota e os parâmetros de buffer aprovados, e reprova o build se recursos, interface, player ou biblioteca nativa mudarem.
+O workflow `.github/workflows/apk.yml` baixa o APK 1.8.1 exato, confere seu SHA-256, aplica somente o desenho limitado da rota e os parâmetros de buffer aprovados, e reprova o build se recursos, interface, player ou biblioteca nativa mudarem.
 
 ## Estado e continuidade
 
