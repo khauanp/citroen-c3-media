@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove that C3 Link 1.8.3 preserves every unrelated 1.8.1 source file."""
+"""Prove that C3 Link 1.8.4 preserves every unrelated 1.8.1 source file."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def main() -> int:
         if path in baseline and (ios_root / path).read_bytes() == baseline[path]
     )
     if unchanged_patch_files:
-        raise RuntimeError(f"expected 1.8.3 patch is missing from: {unchanged_patch_files}")
+        raise RuntimeError(f"expected C3 Link maintenance is missing from: {unchanged_patch_files}")
 
     transport = (ios_root / "C3Link/C3LinkTransport.swift").read_text(encoding="utf-8")
     navigation = (ios_root / "C3Link/NavigationManager.swift").read_text(encoding="utf-8")
@@ -86,12 +86,12 @@ def main() -> int:
         "route keepalive": "scheduleRouteKeepAlive" in navigation and "15_000_000_000" in navigation,
         "navigation GPS": "kCLLocationAccuracyBestForNavigation" in navigation and "distanceFilter = 2" in navigation,
         "contrast filter": "CIColorControls" in tiles and "CIColorMatrix" in tiles,
-        "1.8.3 version": "MARKETING_VERSION: 1.8.3" in project,
+        "1.8.4 version": "MARKETING_VERSION: 1.8.4" in project,
         "app icon setting": "ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon" in project,
     }
     failed = [label for label, present in required_markers.items() if not present]
     if failed:
-        raise RuntimeError(f"required C3 Link 1.8.3 behavior is missing: {failed}")
+        raise RuntimeError(f"required C3 Link 1.8.4 behavior is missing: {failed}")
 
     icon_root = ios_root / "C3Link/Assets.xcassets/AppIcon.appiconset"
     for filename, expected_size in ICON_SIZES.items():

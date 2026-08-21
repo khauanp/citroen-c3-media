@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.4 — 2026-08-21
+
+- mantém integralmente os recursos e a interface da C3 Media 1.8.1;
+- desenha cada segmento visível da rota diretamente no `Canvas`, com contorno e linha azul, evitando a falha do `Path` no Android 5/K00E;
+- preserva o desenho original da rota como fallback e mantém a projeção, o GPS e as coordenadas sem alteração;
+- aumenta o percentil adaptativo do buffer de áudio de 95 para 99 para tolerar mais jitter sem cortes;
+- aumenta moderadamente a tolerância da fila do decodificador de vídeo antes de descartar um quadro, sem elevar resolução ou carga gráfica;
+- mantém a rota ativa durante pausas curtas da conexão C3 Link.
+
 ## 1.8.3 — 2026-08-21
 
 - usa o APK real `C3-Media-1.8.1-K00E.apk` como base binária do tablet; o código Android antigo do repositório não participa do build;

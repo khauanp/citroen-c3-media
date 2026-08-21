@@ -1,16 +1,16 @@
-name: Build K00E map-only APK
+name: Build K00E 1.8.4 maintenance APK
 
 on:
   push:
     branches: [main]
     paths:
-      - "tools/apply_android_1_8_3_mapfix.py"
-      - "tools/verify_android_1_8_3_mapfix.py"
+      - "tools/apply_android_1_8_4_maintenance.py"
+      - "tools/verify_android_1_8_4_maintenance.py"
       - ".github/workflows/apk.yml"
   pull_request:
     paths:
-      - "tools/apply_android_1_8_3_mapfix.py"
-      - "tools/verify_android_1_8_3_mapfix.py"
+      - "tools/apply_android_1_8_4_maintenance.py"
+      - "tools/verify_android_1_8_4_maintenance.py"
       - ".github/workflows/apk.yml"
   workflow_dispatch:
 
@@ -24,7 +24,7 @@ jobs:
       APKTOOL_SHA256: dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423
       BASE_APK_SHA256: be86b35046e09ca900bd0acb30b47101e40a72e7ef0fc33f1a6085c26d9ccb3f
     steps:
-      - name: Checkout map-only patch
+      - name: Checkout focused maintenance patch
         uses: actions/checkout@v4
 
       - name: Use JDK 17
@@ -50,7 +50,7 @@ jobs:
             -o build/apktool.jar
           printf '%s  %s\n' "$APKTOOL_SHA256" "build/apktool.jar" | sha256sum -c -
 
-      - name: Apply only the route persistence patch
+      - name: Apply route rendering and media buffer maintenance
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -58,24 +58,24 @@ jobs:
             -o build/original \
             build/base/C3-Media-1.8.1-K00E.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_3_mapfix.py build/patched
+          python3 tools/apply_android_1_8_4_maintenance.py build/patched
           java -jar build/apktool.jar b \
             build/patched \
-            -o build/C3-Media-1.8.3-K00E-unsigned.apk
+            -o build/C3-Media-1.8.4-K00E-unsigned.apk
 
-      - name: Prove UI and music code are unchanged
+      - name: Prove UI, player and native library are unchanged
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
           java -jar build/apktool.jar d -f \
             -o build/rebuilt \
-            build/C3-Media-1.8.3-K00E-unsigned.apk
-          python3 tools/verify_android_1_8_3_mapfix.py build/original build/rebuilt
-          unzip -t build/C3-Media-1.8.3-K00E-unsigned.apk
+            build/C3-Media-1.8.4-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_4_maintenance.py build/original build/rebuilt
+          unzip -t build/C3-Media-1.8.4-K00E-unsigned.apk
 
-      - name: Upload unsigned map-only APK
+      - name: Upload unsigned maintenance APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.3-K00E-unsigned
-          path: build/C3-Media-1.8.3-K00E-unsigned.apk
+          name: C3-Media-1.8.4-K00E-unsigned
+          path: build/C3-Media-1.8.4-K00E-unsigned.apk
           if-no-files-found: error

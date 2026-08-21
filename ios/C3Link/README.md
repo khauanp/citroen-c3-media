@@ -1,6 +1,6 @@
-# C3 Link 1.8.3 para iPhone
+# C3 Link 1.8.4 para iPhone
 
-Companheiro da C3 Media 1.8.3, preservando a interface da versão 1.8.1. Sugere destinos enquanto o usuário digita, entende mensagens e links copiados do Google Maps/Waze, mostra a rota inteira em um mapa interativo no iPhone, mantém GPS autorizado em segundo plano e envia ao tablet rota, posição, instruções visuais e os tiles necessários. A rota é enviada completa e também em partes pequenas, espaçadas, confirmadas e reenviadas. Os mesmos tiles 2D recebem contraste local antes do envio, evitando sobrecarregar o K00E com 3D. Não captura a tela, não imita CarPlay e não contém voz de GPS.
+Companheiro da C3 Media 1.8.4, preservando a interface da versão 1.8.1. Sugere destinos enquanto o usuário digita, entende mensagens e links copiados do Google Maps/Waze, mostra a rota inteira em um mapa interativo no iPhone, mantém GPS autorizado em segundo plano e envia ao tablet rota, posição, instruções visuais e os tiles necessários. A rota é enviada completa e também em partes pequenas, espaçadas, confirmadas e reenviadas. Os mesmos tiles 2D recebem contraste local antes do envio, evitando sobrecarregar o K00E com 3D. Não captura a tela, não imita CarPlay e não contém voz de GPS.
 
 ## Build local no macOS
 
@@ -21,11 +21,11 @@ xcodebuild \
 
 ## Build pelo Windows
 
-Use o workflow `.github/workflows/ios-c3-link.yml` no GitHub Actions. Ele testa e compila em um executor macOS e entrega `C3-Link-1.8.3-unsigned.ipa`. No Windows, assine e instale o arquivo com Sideloadly.
+Use o workflow `.github/workflows/ios-c3-link.yml` no GitHub Actions. Ele testa e compila em um executor macOS e entrega `C3-Link-1.8.4-unsigned.ipa`. No Windows, assine e instale o arquivo com Sideloadly.
 
 ## Uso
 
-1. Instale a C3 Media 1.8.3 no tablet.
+1. Instale a C3 Media 1.8.4 no tablet.
 2. Conecte o iPhone à rede `Citroen-C3` com IP manual e roteador vazio.
 3. Abra o C3 Link, permita Rede local e Localização Sempre.
 4. Procure um destino e escolha o resultado.
