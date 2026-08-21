@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.8.7 — 2026-08-21
+
+- troca o cálculo visual por rotas automobilísticas do Apple MapKit, respeitando a malha viária e as restrições disponíveis no serviço;
+- elimina toda simplificação por tamanho: a geometria completa é densificada a no máximo 60 m por segmento e enviada integralmente ao tablet;
+- amplia o transporte para 512 partes e 50.000 pontos, suficiente para a rota longa de 154,6 km que expôs o defeito;
+- inclui CRC32 e contagem de pontos no identificador da rota; o tablet só responde `route-ok` após validar todos os bytes e recusar decodificação parcial;
+- remove do K00E os dois `Path` gigantes que causavam quadrados pretos e mantém apenas segmentos locais limitados;
+- consulta radares e limites cadastrados no OpenStreetMap, filtra os pontos pelo corredor da rota e mostra o próximo radar no mapa do tablet;
+- exibe o limite conhecido junto ao velocímetro e deixa o velocímetro vermelho somente acima do limite mais uma histerese de 2 km/h;
+- rejeita coordenadas GPS antigas ou com erro superior a 65 m, mantém atualização de 2 m em segundo plano e suaviza a velocidade;
+- preserva os recursos, design, player, manifesto e bibliotecas nativas do APK real 1.8.1, mantendo as correções de áudio e vídeo anteriores.
+
+## 1.8.6 — 2026-08-21
+
+- mantém no C3 Link a geometria completa devolvida pelo OSRM, em vez de reduzir toda rota longa para 1.200 pontos por intervalo fixo;
+- separa a geometria completa usada no mapa/GPS da geometria compactada usada somente quando o pacote ultrapassa o limite seguro;
+- substitui a amostragem uniforme por Ramer–Douglas–Peucker em metros, preservando curvas e esquinas quando uma compactação for inevitável;
+- amplia o envelope seguro do renderizador Android para cobrir os quatro cantos da tela em qualquer rotação do mapa;
+- evita tanto atalhos retos entre ruas quanto o encerramento prematuro da linha dentro da tela;
+- preserva o design, player, áudio, espelhamento, GPS, tiles e bibliotecas da manutenção anterior.
+
+## 1.8.5 — 2026-08-21
+
+- corrige a regressão da 1.8.4 que invertia o filtro de segmentos e descartava a rota visível;
+- impede que coordenadas muito distantes cheguem ao `Canvas.drawLine`, eliminando os quadrados pretos produzidos pela GPU antiga do K00E;
+- desenha em azul somente segmentos com os dois pontos dentro de uma margem segura ao redor da tela, mantendo o `Path` original como fallback;
+- mantém sem novas alterações o design, o player, o mapa, o GPS, o áudio e o espelhamento que já funcionavam na 1.8.4;
+- continua sendo reconstruída diretamente sobre o APK real C3 Media 1.8.1.
+
+## 1.8.4 — 2026-08-21
+
+- mantém integralmente os recursos e a interface da C3 Media 1.8.1;
+- desenha cada segmento visível da rota diretamente no `Canvas`, com contorno e linha azul, evitando a falha do `Path` no Android 5/K00E;
+- preserva o desenho original da rota como fallback e mantém a projeção, o GPS e as coordenadas sem alteração;
+- aumenta o percentil adaptativo do buffer de áudio de 95 para 99 para tolerar mais jitter sem cortes;
+- aumenta moderadamente a tolerância da fila do decodificador de vídeo antes de descartar um quadro, sem elevar resolução ou carga gráfica;
+- mantém a rota ativa durante pausas curtas da conexão C3 Link.
+
+## 1.8.3 — 2026-08-21
+
+- usa o APK real `C3-Media-1.8.1-K00E.apk` como base binária do tablet; o código Android antigo do repositório não participa do build;
+- preserva, por comparação automática de todo o APK desmontado, a interface, o player, os recursos e a biblioteca nativa da 1.8.1;
+- mantém a rota ativa no tablet durante pausas curtas do UDP, sem alterar os comandos explícitos de encerrar navegação;
+- envia a rota completa e também em partes pequenas, espaçadas e reenviadas, para que a linha azul não dependa de um único pacote;
+- mantém o GPS de navegação do iPhone em alta precisão, inclusive com a tela apagada, e reforça rota e posição a cada 15 segundos;
+- aumenta o contraste dos mesmos tiles 2D do OpenStreetMap antes de transmiti-los, sem exigir renderização 3D do K00E;
+- adiciona um ícone próprio ao C3 Link no iPhone.
+
 ## 1.2.0 — 2026-08-18
 
 - corrige a troca Waze → YouTube/YouTube Music encerrando e zerando o `MediaCodec` antigo antes da nova sessão;
