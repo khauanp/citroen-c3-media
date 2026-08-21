@@ -114,9 +114,10 @@ final class C3LinkTransport: ObservableObject {
         distanceMeters: Double,
         durationSeconds: Double
     ) {
-        // The complete packet gives the tablet an immediate route. Paced
-        // parts provide a second delivery path without flooding the K00E UDP
-        // receiver. The tablet acknowledges either representation.
+        // Short routes may arrive in one datagram. Every route is also sent
+        // in paced parts so long trips keep their exact road geometry. The
+        // r3 route identifier lets the tablet reject a partial/corrupt route
+        // instead of acknowledging a silently truncated line.
         sendLegacyRoute(
             routeId: routeId,
             destination: destination,
@@ -180,9 +181,11 @@ final class C3LinkTransport: ObservableObject {
         maneuver: String,
         stepDistanceMeters: Double,
         remainingDistanceMeters: Double,
-        remainingSeconds: Double
+        remainingSeconds: Double,
+        speedLimitKph: Double?,
+        camera: UpcomingCamera?
     ) {
-        send([
+        var payload: [String: Any] = [
             "type": "position",
             "routeId": routeId,
             "latitude": latitude,
@@ -194,7 +197,17 @@ final class C3LinkTransport: ObservableObject {
             "stepDistanceMeters": stepDistanceMeters,
             "remainingDistanceMeters": remainingDistanceMeters,
             "remainingSeconds": remainingSeconds,
-        ])
+        ]
+        if let speedLimitKph { payload["speedLimitKph"] = speedLimitKph }
+        if let camera {
+            payload["cameraLatitude"] = camera.camera.coordinate.latitude
+            payload["cameraLongitude"] = camera.camera.coordinate.longitude
+            payload["cameraDistanceMeters"] = camera.distanceMeters
+            if let cameraLimit = camera.camera.speedLimitKph {
+                payload["cameraLimitKph"] = cameraLimit
+            }
+        }
+        send(payload)
     }
 
     func sendTileChunk(
@@ -343,7 +356,7 @@ final class C3LinkTransport: ObservableObject {
         }
     }
 
-    private static let routePartBytes = 480
-    private static let maximumRouteParts = 64
-    private static let routePartDelayMilliseconds = 8
+    private static let routePartBytes = 700
+    private static let maximumRouteParts = 512
+    private static let routePartDelayMilliseconds = 3
 }

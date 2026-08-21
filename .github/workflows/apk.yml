@@ -1,16 +1,18 @@
-name: Build K00E 1.8.6 complete route APK
+name: Build K00E 1.8.7 exact navigation APK
 
 on:
   push:
     branches: [main]
     paths:
-      - "tools/apply_android_1_8_6_maintenance.py"
-      - "tools/verify_android_1_8_6_maintenance.py"
+      - "tools/apply_android_1_8_7_navigation.py"
+      - "tools/verify_android_1_8_7_navigation.py"
+      - "tools/android_1_8_7/**"
       - ".github/workflows/apk.yml"
   pull_request:
     paths:
-      - "tools/apply_android_1_8_6_maintenance.py"
-      - "tools/verify_android_1_8_6_maintenance.py"
+      - "tools/apply_android_1_8_7_navigation.py"
+      - "tools/verify_android_1_8_7_navigation.py"
+      - "tools/android_1_8_7/**"
       - ".github/workflows/apk.yml"
   workflow_dispatch:
 
@@ -50,7 +52,7 @@ jobs:
             -o build/apktool.jar
           printf '%s  %s\n' "$APKTOOL_SHA256" "build/apktool.jar" | sha256sum -c -
 
-      - name: Apply rotation-complete route rendering and media maintenance
+      - name: Apply exact route, radar, speed, and media maintenance
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -58,10 +60,10 @@ jobs:
             -o build/original \
             build/base/C3-Media-1.8.1-K00E.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_6_maintenance.py build/patched
+          python3 tools/apply_android_1_8_7_navigation.py build/patched
           java -jar build/apktool.jar b \
             build/patched \
-            -o build/C3-Media-1.8.6-K00E-unsigned.apk
+            -o build/C3-Media-1.8.7-K00E-unsigned.apk
 
       - name: Prove UI, player and native library are unchanged
         run: |
@@ -69,13 +71,13 @@ jobs:
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
           java -jar build/apktool.jar d -f \
             -o build/rebuilt \
-            build/C3-Media-1.8.6-K00E-unsigned.apk
-          python3 tools/verify_android_1_8_6_maintenance.py build/original build/rebuilt
-          unzip -t build/C3-Media-1.8.6-K00E-unsigned.apk
+            build/C3-Media-1.8.7-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_7_navigation.py build/original build/rebuilt
+          unzip -t build/C3-Media-1.8.7-K00E-unsigned.apk
 
       - name: Upload unsigned maintenance APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.6-K00E-unsigned
-          path: build/C3-Media-1.8.6-K00E-unsigned.apk
+          name: C3-Media-1.8.7-K00E-unsigned
+          path: build/C3-Media-1.8.7-K00E-unsigned.apk
           if-no-files-found: error

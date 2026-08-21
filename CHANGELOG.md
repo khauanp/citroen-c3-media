@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.7 — 2026-08-21
+
+- troca o cálculo visual por rotas automobilísticas do Apple MapKit, respeitando a malha viária e as restrições disponíveis no serviço;
+- elimina toda simplificação por tamanho: a geometria completa é densificada a no máximo 60 m por segmento e enviada integralmente ao tablet;
+- amplia o transporte para 512 partes e 50.000 pontos, suficiente para a rota longa de 154,6 km que expôs o defeito;
+- inclui CRC32 e contagem de pontos no identificador da rota; o tablet só responde `route-ok` após validar todos os bytes e recusar decodificação parcial;
+- remove do K00E os dois `Path` gigantes que causavam quadrados pretos e mantém apenas segmentos locais limitados;
+- consulta radares e limites cadastrados no OpenStreetMap, filtra os pontos pelo corredor da rota e mostra o próximo radar no mapa do tablet;
+- exibe o limite conhecido junto ao velocímetro e deixa o velocímetro vermelho somente acima do limite mais uma histerese de 2 km/h;
+- rejeita coordenadas GPS antigas ou com erro superior a 65 m, mantém atualização de 2 m em segundo plano e suaviza a velocidade;
+- preserva os recursos, design, player, manifesto e bibliotecas nativas do APK real 1.8.1, mantendo as correções de áudio e vídeo anteriores.
+
 ## 1.8.6 — 2026-08-21
 
 - mantém no C3 Link a geometria completa devolvida pelo OSRM, em vez de reduzir toda rota longa para 1.200 pontos por intervalo fixo;

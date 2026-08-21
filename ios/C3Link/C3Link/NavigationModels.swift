@@ -29,6 +29,26 @@ struct NavigationRoute {
     let steps: [NavigationStep]
 }
 
+struct SafetyCamera: Identifiable, Equatable {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let routeIndex: Int
+    let speedLimitKph: Double?
+
+    static func == (lhs: SafetyCamera, rhs: SafetyCamera) -> Bool {
+        lhs.id == rhs.id &&
+            lhs.coordinate.latitude == rhs.coordinate.latitude &&
+            lhs.coordinate.longitude == rhs.coordinate.longitude &&
+            lhs.routeIndex == rhs.routeIndex &&
+            lhs.speedLimitKph == rhs.speedLimitKph
+    }
+}
+
+struct UpcomingCamera {
+    let camera: SafetyCamera
+    let distanceMeters: Double
+}
+
 struct MapTileKey: Hashable {
     let zoom: Int
     let x: Int

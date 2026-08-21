@@ -277,6 +277,7 @@ struct ContentView: View {
                 ZStack {
                     RoutePreviewMap(
                         routeCoordinates: navigation.routeCoordinates,
+                        safetyCameras: navigation.safetyCameras,
                         currentCoordinate: navigation.currentCoordinate,
                         destination: destination,
                         routeRevision: navigation.routeRevision,
@@ -331,6 +332,24 @@ struct ContentView: View {
                             .background(Color.blue.opacity(0.09), in: RoundedRectangle(cornerRadius: 12))
                     }
 
+                    if navigation.currentSpeedLimitKph != nil || navigation.upcomingCamera != nil {
+                        HStack(spacing: 14) {
+                            if let limit = navigation.currentSpeedLimitKph {
+                                Label("Limite \(Int(limit.rounded())) km/h", systemImage: "speedometer")
+                            }
+                            if let camera = navigation.upcomingCamera {
+                                Label(
+                                    "Radar a \(formatSafetyDistance(camera.distanceMeters))",
+                                    systemImage: "camera.fill"
+                                )
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.red)
+                        .accessibilityLabel("Dados viários do OpenStreetMap")
+                    }
+
                     Label("Pode bloquear a tela: o mapa segue no tablet e o GPS não fala.", systemImage: "lock.fill")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.green)
@@ -345,6 +364,12 @@ struct ContentView: View {
             }
             .c3Card()
         }
+    }
+
+    private func formatSafetyDistance(_ meters: Double) -> String {
+        meters < 1_000
+            ? "\(Int(meters.rounded())) m"
+            : String(format: "%.1f km", meters / 1_000)
     }
 
     private var audioCard: some View {

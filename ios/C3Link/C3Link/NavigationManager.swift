@@ -25,9 +25,13 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var routeCoordinates: [CLLocationCoordinate2D] = []
     @Published private(set) var routeRevision = 0
     @Published private(set) var routeConfirmedOnTablet = false
+    @Published private(set) var currentSpeedLimitKph: Double?
+    @Published private(set) var upcomingCamera: UpcomingCamera?
+    @Published private(set) var safetyCameras: [SafetyCamera] = []
     let transport = C3LinkTransport()
     private let locationManager = CLLocationManager()
     private let navigationService = OpenNavigationService()
+    private let roadSafetyService = RoadSafetyService()
     private let destinationImporter = DestinationLinkImporter()
     private var tileRelay: MapTileRelay!
     private var route: NavigationRoute?
@@ -42,6 +46,11 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     private var routeRetryTask: Task<Void, Never>?
     private var routeKeepAliveTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
+    private var cameraLoadTask: Task<Void, Never>?
+    private var speedLimitTask: Task<Void, Never>?
+    private var lastSpeedLimitLookupAt = Date.distantPast
+    private var lastSpeedLimitLookupLocation: CLLocation?
+    private var smoothedSpeedMps = 0.0
     private var suppressSuggestions = false
 
     override init() {
@@ -136,7 +145,9 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     func startNavigation(to result: DestinationResult) {
-        guard let origin = lastLocation else {
+        guard let origin = lastLocation,
+              origin.horizontalAccuracy <= 65,
+              abs(origin.timestamp.timeIntervalSinceNow) <= 10 else {
             errorMessage = "Aguardando sinal de GPS…"
             locationManager.startUpdatingLocation()
             return
@@ -170,6 +181,10 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
         routeRetryTask = nil
         routeKeepAliveTask?.cancel()
         routeKeepAliveTask = nil
+        cameraLoadTask?.cancel()
+        cameraLoadTask = nil
+        speedLimitTask?.cancel()
+        speedLimitTask = nil
         tileRelay.cancelPending()
         transport.sendStop()
         route = nil
@@ -180,6 +195,10 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
         remainingAtRoutePoint = []
         lastRoutePointIndex = 0
         deviationCount = 0
+        safetyCameras = []
+        currentSpeedLimitKph = nil
+        upcomingCamera = nil
+        smoothedSpeedMps = 0
         currentInstruction = ""
         routeSummary = ""
         routeCoordinates = []
@@ -234,11 +253,15 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        guard let location = locations.last,
+              location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= 65,
+              abs(location.timestamp.timeIntervalSinceNow) <= 10 else { return }
         Task { @MainActor in
             lastLocation = location
             currentCoordinate = location.coordinate
             locationStatus = "GPS ativo • ±\(Int(location.horizontalAccuracy)) m"
+            updateSmoothedSpeed(with: location)
             if isNavigating { sendPosition(location) }
         }
     }
@@ -260,16 +283,29 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func install(_ calculated: NavigationRoute, destination: DestinationResult) {
+        guard let integrityId = RouteIntegrity.identifier(
+            polyline: calculated.encodedPolyline,
+            coordinates: calculated.coordinates
+        ) else {
+            errorMessage = "A rota completa excedeu o limite seguro de envio ao tablet."
+            isRecalculating = false
+            return
+        }
         route = calculated
         self.destination = destination
         activeDestination = destination
         routeCoordinates = calculated.coordinates
         routeRevision += 1
         routeConfirmedOnTablet = false
-        routeId = UUID().uuidString
+        routeId = integrityId
         stepIndex = calculated.steps.count > 1 ? 1 : 0
         lastRoutePointIndex = 0
         deviationCount = 0
+        safetyCameras = []
+        currentSpeedLimitKph = nil
+        upcomingCamera = nil
+        lastSpeedLimitLookupAt = .distantPast
+        lastSpeedLimitLookupLocation = nil
         remainingAtRoutePoint = remainingDistances(for: calculated.coordinates)
         currentInstruction = currentStep?.instruction ?? "Siga a rota"
         routeSummary = formatSummary(distance: calculated.distanceMeters, seconds: calculated.durationSeconds)
@@ -284,6 +320,7 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
         sendCurrentRoute()
         scheduleRouteRetries(for: routeId)
         scheduleRouteKeepAlive(for: routeId)
+        loadSafetyCameras(for: routeId, coordinates: calculated.coordinates)
         if let location = lastLocation { sendPosition(location) }
     }
 
@@ -294,7 +331,7 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
 
     private func sendCurrentRoute() {
         guard transport.isReady, let route, let destination else { return }
-        guard route.encodedPolyline.utf8.count <= 28_000 else {
+        guard route.encodedPolyline.utf8.count <= RouteIntegrity.maximumPolylineBytes else {
             errorMessage = "A rota ficou longa demais para ser enviada ao tablet"
             return
         }
@@ -314,7 +351,7 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
             while !Task.isCancelled {
                 let delay: UInt64
                 if attempt < 8 {
-                    delay = 650_000_000
+                    delay = 2_200_000_000
                 } else if attempt < 20 {
                     delay = 2_500_000_000
                 } else {
@@ -341,7 +378,7 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
                       let self,
                       self.isNavigating,
                       self.routeId == expectedRouteId else { return }
-                self.sendCurrentRoute()
+                if !self.routeConfirmedOnTablet { self.sendCurrentRoute() }
                 if let location = self.lastLocation { self.sendPosition(location) }
             }
         }
@@ -388,7 +425,7 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func matchesCurrentRoute(_ candidate: String?) -> Bool {
-        guard let candidate, !candidate.isEmpty else { return true }
+        guard routeId.hasPrefix(RouteIntegrity.identifierPrefix + "_") else { return false }
         return candidate == routeId
     }
 
@@ -408,21 +445,92 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
             ? route.durationSeconds * routeRemaining / route.distanceMeters
             : 0
         let instruction = step?.instruction ?? "Siga a rota"
+        let nextCamera = nearestUpcomingCamera(fromRouteIndex: nearest.index, currentRemaining: routeRemaining)
+        upcomingCamera = nextCamera
         currentInstruction = instruction
         routeSummary = formatSummary(distance: routeRemaining, seconds: remainingSeconds)
         transport.sendPosition(
             routeId: routeId,
             latitude: location.coordinate.latitude,
             longitude: location.coordinate.longitude,
-            speedMps: max(0, location.speed),
+            speedMps: smoothedSpeedMps,
             course: location.course >= 0 ? location.course : 0,
             instruction: instruction,
             maneuver: step?.maneuver ?? "straight",
             stepDistanceMeters: stepDistance,
             remainingDistanceMeters: routeRemaining,
-            remainingSeconds: remainingSeconds
+            remainingSeconds: remainingSeconds,
+            speedLimitKph: currentSpeedLimitKph,
+            camera: nextCamera
         )
+        refreshSpeedLimitIfNeeded(at: location)
         evaluateDeviation(nearest.distanceMeters, from: location)
+    }
+
+    private func loadSafetyCameras(
+        for expectedRouteId: String,
+        coordinates: [CLLocationCoordinate2D]
+    ) {
+        cameraLoadTask?.cancel()
+        cameraLoadTask = Task { [weak self] in
+            guard let self else { return }
+            let cameras = await self.roadSafetyService.cameras(along: coordinates)
+            guard !Task.isCancelled,
+                  self.isNavigating,
+                  self.routeId == expectedRouteId else { return }
+            self.safetyCameras = cameras
+            if let location = self.lastLocation { self.sendPosition(location) }
+        }
+    }
+
+    private func refreshSpeedLimitIfNeeded(at location: CLLocation) {
+        guard speedLimitTask == nil else { return }
+        let elapsed = Date().timeIntervalSince(lastSpeedLimitLookupAt)
+        let moved = lastSpeedLimitLookupLocation?.distance(from: location) ?? .greatestFiniteMagnitude
+        guard elapsed >= 20 || moved >= 250 else { return }
+        lastSpeedLimitLookupAt = Date()
+        lastSpeedLimitLookupLocation = location
+        let expectedRouteId = routeId
+        let course = location.course >= 0 ? location.course : -1
+        speedLimitTask = Task { [weak self] in
+            guard let self else { return }
+            let limit = await self.roadSafetyService.speedLimit(at: location, courseDegrees: course)
+            guard !Task.isCancelled,
+                  self.isNavigating,
+                  self.routeId == expectedRouteId else {
+                self.speedLimitTask = nil
+                return
+            }
+            self.currentSpeedLimitKph = limit
+            self.speedLimitTask = nil
+            if let current = self.lastLocation { self.sendPosition(current) }
+        }
+    }
+
+    private func nearestUpcomingCamera(
+        fromRouteIndex currentIndex: Int,
+        currentRemaining: Double
+    ) -> UpcomingCamera? {
+        safetyCameras.compactMap { camera -> UpcomingCamera? in
+            guard camera.routeIndex >= max(0, currentIndex - 3),
+                  remainingAtRoutePoint.indices.contains(camera.routeIndex) else { return nil }
+            let distance = currentRemaining - remainingAtRoutePoint[camera.routeIndex]
+            guard distance >= -35, distance <= 20_000 else { return nil }
+            return UpcomingCamera(camera: camera, distanceMeters: max(0, distance))
+        }.min { $0.distanceMeters < $1.distanceMeters }
+    }
+
+    private func updateSmoothedSpeed(with location: CLLocation) {
+        let isReliable = location.speed >= 0 &&
+            (location.speedAccuracy < 0 || location.speedAccuracy <= 3.5)
+        let measured = isReliable ? location.speed : 0
+        if measured < 0.6 {
+            smoothedSpeedMps = 0
+        } else if smoothedSpeedMps == 0 {
+            smoothedSpeedMps = measured
+        } else {
+            smoothedSpeedMps = smoothedSpeedMps * 0.65 + measured * 0.35
+        }
     }
 
     private func advanceStepIfNeeded(_ location: CLLocation) {

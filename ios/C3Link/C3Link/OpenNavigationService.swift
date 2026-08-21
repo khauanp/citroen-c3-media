@@ -21,11 +21,8 @@ enum NavigationServiceError: LocalizedError {
 }
 
 final class OpenNavigationService {
-    static let userAgent = "C3Link/2.2 (personal in-car navigation; https://github.com/khauanp/citroen-c3-media)"
-    static let defaultRoutingEndpoint = "https://router.project-osrm.org"
-    private static let maximumTransportRoutePoints = 10_000
-    private static let preferredTransportPolylineBytes = 26_000
-    private static let maximumTransportPolylineBytes = 28_000
+    static let userAgent = "C3Link/1.8.7 (personal in-car navigation; https://github.com/khauanp/citroen-c3-media)"
+    static let defaultRoutingEndpoint = "mapkit://automobile"
 
     private let session: URLSession
 
@@ -250,72 +247,75 @@ final class OpenNavigationService {
     }
 
     func route(from origin: CLLocationCoordinate2D, to destination: DestinationResult) async throws -> NavigationRoute {
-        let defaults = UserDefaults.standard
-        let endpoint = (defaults.string(forKey: "c3link.routing-endpoint") ?? "").nilIfBlank
-            ?? Self.defaultRoutingEndpoint
-        let coordinates = "\(origin.longitude),\(origin.latitude);\(destination.longitude),\(destination.latitude)"
-        guard var components = URLComponents(string: endpoint + "/route/v1/driving/" + coordinates) else {
-            throw NavigationServiceError.invalidEndpoint
-        }
-        components.queryItems = [
-            URLQueryItem(name: "overview", value: "full"),
-            URLQueryItem(name: "geometries", value: "polyline"),
-            URLQueryItem(name: "steps", value: "true"),
-            URLQueryItem(name: "alternatives", value: "false"),
-        ]
-        guard let url = components.url else { throw NavigationServiceError.invalidEndpoint }
-        var request = URLRequest(url: url)
-        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue("pt-BR,pt;q=0.9", forHTTPHeaderField: "Accept-Language")
-        let (data, response) = try await session.data(for: request)
-        try validate(response)
-        let decoded = try JSONDecoder().decode(OSRMResponse.self, from: data)
-        guard decoded.code == "Ok", let selected = decoded.routes.first else {
+        let request = MKDirections.Request()
+        request.source = MKMapItem(placemark: MKPlacemark(coordinate: origin))
+        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: destination.coordinate))
+        request.transportType = .automobile
+        request.requestsAlternateRoutes = false
+        request.departureDate = Date()
+
+        let response: MKDirections.Response
+        do {
+            response = try await MKDirections(request: request).calculate()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
             throw NavigationServiceError.noRoute
         }
-        let fullCoordinates = PolylineEncoder.decode(selected.geometry, precision: 5)
+        guard let selected = response.routes.min(by: { $0.expectedTravelTime < $1.expectedTravelTime }) else {
+            throw NavigationServiceError.noRoute
+        }
+        let fullCoordinates = RouteGeometry.densify(coordinates(from: selected.polyline))
         guard fullCoordinates.count >= 2 else { throw NavigationServiceError.invalidResponse }
-
-        var encoded = selected.geometry
-        var transportCoordinates = fullCoordinates
-        if transportCoordinates.count > Self.maximumTransportRoutePoints {
-            transportCoordinates = PolylineEncoder.simplify(
-                fullCoordinates,
-                maximumPoints: Self.maximumTransportRoutePoints
-            )
-            encoded = PolylineEncoder.encode(transportCoordinates, precision: 5)
-        }
-
-        var pointLimit = min(transportCoordinates.count, Self.maximumTransportRoutePoints)
-        while encoded.utf8.count > Self.preferredTransportPolylineBytes && pointLimit > 200 {
-            pointLimit = max(200, pointLimit * 3 / 4)
-            transportCoordinates = PolylineEncoder.simplify(fullCoordinates, maximumPoints: pointLimit)
-            encoded = PolylineEncoder.encode(transportCoordinates, precision: 5)
-        }
-        guard encoded.utf8.count <= Self.maximumTransportPolylineBytes else {
+        let encoded = PolylineEncoder.encode(fullCoordinates, precision: 5)
+        guard encoded.utf8.count <= RouteIntegrity.maximumPolylineBytes else {
             throw NavigationServiceError.invalidResponse
         }
-        let steps = selected.legs.flatMap(\.steps).compactMap { step -> NavigationStep? in
-            guard step.maneuver.location.count == 2 else { return nil }
-            let coordinate = CLLocationCoordinate2D(
-                latitude: step.maneuver.location[1],
-                longitude: step.maneuver.location[0]
-            )
+        let steps = selected.steps.compactMap { step -> NavigationStep? in
+            guard !step.instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let coordinate = coordinates(from: step.polyline).first else { return nil }
             return NavigationStep(
-                instruction: instruction(for: step),
-                maneuver: maneuverKey(for: step),
+                instruction: step.instructions,
+                maneuver: maneuverKey(for: step.instructions),
                 coordinate: coordinate,
                 distanceMeters: step.distance,
-                durationSeconds: step.duration
+                durationSeconds: selected.distance > 0
+                    ? selected.expectedTravelTime * step.distance / selected.distance
+                    : 0
             )
         }
         return NavigationRoute(
             encodedPolyline: encoded,
             coordinates: fullCoordinates,
             distanceMeters: selected.distance,
-            durationSeconds: selected.duration,
+            durationSeconds: selected.expectedTravelTime,
             steps: steps
         )
+    }
+
+    private func coordinates(from polyline: MKPolyline) -> [CLLocationCoordinate2D] {
+        guard polyline.pointCount > 0 else { return [] }
+        var coordinates = [
+            CLLocationCoordinate2D
+        ](repeating: CLLocationCoordinate2D(latitude: 0, longitude: 0), count: polyline.pointCount)
+        coordinates.withUnsafeMutableBufferPointer { buffer in
+            if let baseAddress = buffer.baseAddress {
+                polyline.getCoordinates(baseAddress, range: NSRange(location: 0, length: polyline.pointCount))
+            }
+        }
+        return coordinates
+    }
+
+    private func maneuverKey(for instruction: String) -> String {
+        let value = instruction.folding(
+            options: [.diacriticInsensitive, .caseInsensitive],
+            locale: Locale(identifier: "pt_BR")
+        ).lowercased()
+        if value.contains("rotatoria") || value.contains("roundabout") { return "roundabout" }
+        if value.contains("retorno") || value.contains("u-turn") { return "uturn" }
+        if value.contains("esquerda") || value.contains("left") { return "left" }
+        if value.contains("direita") || value.contains("right") { return "right" }
+        return "straight"
     }
 
     private func validate(_ response: URLResponse) throws {

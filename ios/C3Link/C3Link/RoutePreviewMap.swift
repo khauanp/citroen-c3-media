@@ -4,6 +4,7 @@ import SwiftUI
 /** Interactive route overview for the iPhone companion. */
 struct RoutePreviewMap: UIViewRepresentable {
     let routeCoordinates: [CLLocationCoordinate2D]
+    let safetyCameras: [SafetyCamera]
     let currentCoordinate: CLLocationCoordinate2D?
     let destination: DestinationResult?
     let routeRevision: Int
@@ -31,10 +32,11 @@ struct RoutePreviewMap: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         let routeChanged = context.coordinator.routeRevision != routeRevision
+        let cameraIDs = Set(safetyCameras.map(\.id))
+        let camerasChanged = cameraIDs != context.coordinator.cameraIDs
         if routeChanged {
             context.coordinator.routeRevision = routeRevision
             mapView.removeOverlays(mapView.overlays.filter { $0 is MKPolyline })
-            mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
 
             if routeCoordinates.count >= 2 {
                 var coordinates = routeCoordinates
@@ -45,11 +47,24 @@ struct RoutePreviewMap: UIViewRepresentable {
                 context.coordinator.routePolyline = nil
             }
 
+        }
+
+        if routeChanged || camerasChanged {
+            context.coordinator.cameraIDs = cameraIDs
+            mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
             if let destination {
                 let annotation = RouteDestinationAnnotation()
                 annotation.coordinate = destination.coordinate
                 annotation.title = destination.title
                 annotation.subtitle = destination.subtitle
+                mapView.addAnnotation(annotation)
+            }
+            for camera in safetyCameras {
+                let annotation = RouteCameraAnnotation()
+                annotation.coordinate = camera.coordinate
+                annotation.title = "Radar • OpenStreetMap"
+                annotation.subtitle = camera.speedLimitKph.map { "Limite \(Int($0.rounded())) km/h" }
+                    ?? "Limite não informado"
                 mapView.addAnnotation(annotation)
             }
         }
@@ -95,6 +110,7 @@ struct RoutePreviewMap: UIViewRepresentable {
         var routeRevision = -1
         var fitRequestID = -1
         var routePolyline: MKPolyline?
+        var cameraIDs = Set<String>()
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             guard let polyline = overlay as? MKPolyline else { return MKOverlayRenderer(overlay: overlay) }
@@ -107,6 +123,17 @@ struct RoutePreviewMap: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is RouteCameraAnnotation {
+                let identifier = "c3-camera"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
+                    ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.canShowCallout = true
+                view.markerTintColor = .systemRed
+                view.glyphImage = UIImage(systemName: "camera.fill")
+                view.displayPriority = .required
+                return view
+            }
             guard annotation is RouteDestinationAnnotation else { return nil }
             let identifier = "c3-destination"
             let view = (mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView)
@@ -122,3 +149,4 @@ struct RoutePreviewMap: UIViewRepresentable {
 }
 
 private final class RouteDestinationAnnotation: MKPointAnnotation {}
+private final class RouteCameraAnnotation: MKPointAnnotation {}
