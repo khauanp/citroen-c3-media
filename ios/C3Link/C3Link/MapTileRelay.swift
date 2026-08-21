@@ -7,7 +7,6 @@ final class MapTileRelay {
     private weak var transport: C3LinkTransport?
     private let operationQueue: OperationQueue
     private let session: URLSession
-    private let imageContext = CIContext(options: [.cacheIntermediates: false])
     private let lock = NSLock()
     private var inFlight: Set<MapTileKey> = []
     private var generation = 0
@@ -142,7 +141,7 @@ final class MapTileRelay {
             "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
             "inputBiasVector": CIVector(x: 0.039, y: 0.039, z: 0.039, w: 0),
         ])
-        guard let cgImage = imageContext.createCGImage(toned, from: image.extent),
+        guard let cgImage = Self.imageContext.createCGImage(toned, from: image.extent),
               let png = UIImage(cgImage: cgImage).pngData(),
               png.count <= Self.maximumTileBytes else { return nil }
         return png
@@ -173,6 +172,9 @@ final class MapTileRelay {
     }()
 
     private static let pngSignature = Data([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    // Static properties initialize lazily. Do not touch Core Image during app
+    // launch, music playback or a navigation session that already has tiles.
+    private static let imageContext = CIContext(options: [.cacheIntermediates: false])
     private static let chunkBytes = 900
     private static let maximumTileBytes = 512 * 1024
     private static let minimumCacheSeconds: TimeInterval = 7 * 24 * 60 * 60
