@@ -31,8 +31,8 @@ android {
         applicationId = "com.c3media.dashboard"
         minSdk = 21
         targetSdk = 28
-        versionCode = 10200
-        versionName = "1.2.0"
+        versionCode = 10802
+        versionName = "1.8.2"
 
         externalNativeBuild {
             cmake {

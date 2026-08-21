@@ -1,6 +1,6 @@
 # Continuidade do projeto
 
-Atualizado em: 18 de agosto de 2026 — versão 1.2.0
+Atualizado em: 21 de agosto de 2026 — versão 1.8.2
 
 ## Objetivo fechado
 
@@ -102,8 +102,9 @@ Limite aceito pelo usuário (opção A, sem dongle): AirPlay não fornece uma se
 ## Assinatura do APK
 
 - O APK entregue é uma build `release`, sem flag de depuração.
-- Certificado SHA-256: `02e9c5d7abfc2a91fe51fc76eac3ef791aa5c06948a00108a6c7c16a839a94ff`.
-- A chave privada não deve ser enviada ao GitHub. Ela está no backup privado `C3-Media-signing-backup.zip` e deve ser reutilizada para que futuras versões instalem como atualização sobre a 1.0.0/1.1.0/1.2.0.
+- A chave privada original da 1.8.1 não estava no pacote nem no repositório recuperado.
+- A 1.8.2 usa uma nova chave privada mantida fora do GitHub no backup entregue junto da versão.
+- Reutilizar obrigatoriamente essa nova chave nas próximas versões para permitir atualização sobre a 1.8.2.
 
 ## Testes físicos ainda obrigatórios
 
@@ -132,4 +133,14 @@ Não declarar a versão final de hardware sem estes testes no K00E real:
 
 ## Próximo passo exato
 
-Gerar/instalar a 1.2.0 no K00E e repetir o roteiro físico acima. Se houver encerramento, abrir **Ajustes técnicos → Última falha registrada** e, quando possível, coletar `adb logcat` filtrando `C3Media`, `AirPlayNative`, `VideoPipeline`, `MediaCodec` e `AndroidRuntime`.
+Gerar/instalar a 1.8.2 no K00E e validar no hardware real: encerrar o espelhamento repetidamente, iniciar uma rota pelo C3 Link, bloquear o iPhone, conferir a linha azul sobre o mapa e dirigir com atualização contínua do GPS. Se houver encerramento, abrir **Ajustes técnicos → Última falha registrada** e, quando possível, coletar `adb logcat` filtrando `C3Media`, `C3LinkServer`, `VideoRenderer`, `MediaCodec` e `AndroidRuntime`.
+
+## Reconstrução 1.8.2
+
+- A tag 1.8.1 continha APK/IPA, mas a fonte Android rastreada ainda correspondia à linha 1.2. A camada 1.8.x foi reconstruída a partir do APK validado e voltou a ser publicada como Kotlin legível.
+- `C3LinkServer`, montagem de partes, decoder de polyline, projeção Web Mercator e cache de tiles agora estão presentes diretamente em `app/src/lite`.
+- A rota é persistida, recebida com confirmação e desenhada acima dos tiles independentemente do carregamento do mapa.
+- O mapa usa raster 2D CARTO Voyager com atribuição visível, cache RGB565 e limite de 12 MB na memória.
+- O fim do espelhamento usa `MediaCodec.flush()` e mantém o codec configurado; `stop()/release()` ficam reservados para o encerramento real do serviço.
+- O C3 Link reafirma a rota a cada 20 segundos, envia GPS com filtro de 2 metros durante navegação e mantém atualização em segundo plano.
+- A versão 1.8.2 inicia uma nova assinatura Android. Guardar a nova chave para todas as atualizações futuras.

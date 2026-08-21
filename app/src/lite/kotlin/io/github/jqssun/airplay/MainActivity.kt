@@ -52,6 +52,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             service = (binder as AirPlayService.LocalBinder).service
             bound = true
+            dashboard.setMapTileStore(service?.mapTileStore)
             service?.addListener(stateListener)
             if (surfaceView.holder.surface?.isValid == true) {
                 service?.setVideoSurface(surfaceView.holder.surface)
@@ -60,6 +61,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
         override fun onServiceDisconnected(name: ComponentName?) {
             service?.removeListener(stateListener)
+            dashboard.setMapTileStore(null)
             service = null
             bound = false
         }

@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
@@ -16,6 +18,8 @@ import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import io.github.jqssun.airplay.connectivity.ConnectionStatus
+import io.github.jqssun.airplay.connectivity.C3MapProjection
+import io.github.jqssun.airplay.connectivity.C3MapTileStore
 import io.github.jqssun.airplay.service.DisplayMode
 import io.github.jqssun.airplay.service.MediaState
 import java.text.SimpleDateFormat
@@ -23,6 +27,7 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 class DashboardView(context: Context) : View(context) {
     interface Actions {
@@ -53,6 +58,21 @@ class DashboardView(context: Context) : View(context) {
     private var pressedX = 0f
     private var pressedY = 0f
     private var settingsTriggered = false
+    private var mapTileStore: C3MapTileStore? = null
+    private var displayedLatitude = Double.NaN
+    private var displayedLongitude = Double.NaN
+    private var mapBearing = 0f
+    private var mapBearingRouteId = ""
+    private val mapTileFilter = ColorMatrixColorFilter(ColorMatrix().apply {
+        setSaturation(0.88f)
+        postConcat(ColorMatrix(floatArrayOf(
+            1.07f, 0f, 0f, 0f, -5f,
+            0f, 1.07f, 0f, 0f, -5f,
+            0f, 0f, 1.07f, 0f, -5f,
+            0f, 0f, 0f, 1f, 0f,
+        )))
+    })
+    private val tileInvalidator = { postInvalidateOnAnimation() }
     private val settingsLongPress = Runnable {
         settingsTriggered = true
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
@@ -83,6 +103,14 @@ class DashboardView(context: Context) : View(context) {
         invalidate()
     }
 
+    fun setMapTileStore(store: C3MapTileStore?) {
+        if (mapTileStore === store) return
+        mapTileStore?.onTileAvailable = null
+        mapTileStore = store
+        store?.onTileAvailable = tileInvalidator
+        invalidate()
+    }
+
     fun triggerStartupAnimation() {
         splashUntil = SystemClock.uptimeMillis() + 2_200L
         invalidate()
@@ -101,6 +129,8 @@ class DashboardView(context: Context) : View(context) {
             drawStandby(canvas)
         } else if (media.mode == DisplayMode.MIRROR) {
             drawMirrorChrome(canvas)
+        } else if (media.mode == DisplayMode.NAVIGATION) {
+            drawNavigation(canvas)
         } else {
             drawBackground(canvas)
             drawRail(canvas)
@@ -148,7 +178,7 @@ class DashboardView(context: Context) : View(context) {
 
         drawHomeIcon(canvas, 66f, 210f, media.mode == DisplayMode.IDLE)
         drawMusicIcon(canvas, 66f, 310f, media.mode == DisplayMode.AUDIO)
-        drawMapIcon(canvas, 66f, 410f, media.mode == DisplayMode.MIRROR)
+        drawMapIcon(canvas, 66f, 410f, media.mode == DisplayMode.MIRROR || media.mode == DisplayMode.NAVIGATION)
         drawConnectionIcon(canvas, 66f, 650f, connection.networkReady, "REDE")
         drawConnectionIcon(canvas, 66f, 730f, connection.radioConnected, "RÁDIO")
     }
@@ -163,6 +193,7 @@ class DashboardView(context: Context) : View(context) {
 
     private fun subtitle(): String = when (media.mode) {
         DisplayMode.AUDIO -> "Música do iPhone"
+        DisplayMode.NAVIGATION -> "Navegação pelo GPS do iPhone"
         DisplayMode.PIN -> "Autorização"
         DisplayMode.ERROR -> "Atenção necessária"
         DisplayMode.STARTING -> "Inicializando"
@@ -296,6 +327,219 @@ class DashboardView(context: Context) : View(context) {
         }
         mediaButton(canvas, 1204f, 666f, 42f, false) { drawNext(canvas, 1204f, 666f) }
         text(canvas, if (media.energy.thermalLimited) "PROTEÇÃO TÉRMICA" else "CONTROLES DE MÍDIA", 1090f, 754f, 11f, if (media.energy.thermalLimited) AMBER else MUTED_2, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
+    }
+
+    private fun drawNavigation(canvas: Canvas) {
+        val navigation = media.navigation
+        val route = navigation.route
+        val fallback = route.firstOrNull()
+        val targetLatitude = navigation.latitude.takeIf { it in -90.0..90.0 && (it != 0.0 || navigation.longitude != 0.0) }
+            ?: fallback?.latitude
+        val targetLongitude = navigation.longitude.takeIf { it in -180.0..180.0 && (navigation.latitude != 0.0 || it != 0.0) }
+            ?: fallback?.longitude
+        canvas.drawColor(MAP_BACKGROUND)
+        if (targetLatitude == null || targetLongitude == null) {
+            drawRail(canvas)
+            card(canvas, 250f, 280f, 1110f, 520f, 32f, Color.argb(238, 12, 19, 25))
+            text(canvas, "Aguardando a rota do iPhone", 680f, 377f, 31f, WHITE, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
+            text(canvas, "Abra o C3 Link e escolha um destino", 680f, 428f, 18f, MUTED, Paint.Align.CENTER, Typeface.DEFAULT)
+            return
+        }
+
+        if (!displayedLatitude.isFinite() || !displayedLongitude.isFinite() || mapBearingRouteId != navigation.routeId) {
+            displayedLatitude = targetLatitude
+            displayedLongitude = targetLongitude
+            mapBearingRouteId = navigation.routeId
+            mapBearing = (C3MapProjection.routeBearingDegrees(targetLatitude, targetLongitude, route)
+                ?: navigation.courseDegrees).toFloat()
+        } else {
+            displayedLatitude += (targetLatitude - displayedLatitude) * POSITION_SMOOTHING
+            displayedLongitude += (targetLongitude - displayedLongitude) * POSITION_SMOOTHING
+        }
+
+        val routeBearing = C3MapProjection.routeBearingDegrees(targetLatitude, targetLongitude, route)
+        val wantedBearing = if (navigation.speedMps >= 3.0 && navigation.courseDegrees.isFinite()) {
+            navigation.courseDegrees
+        } else {
+            routeBearing ?: navigation.courseDegrees
+        }
+        val delta = C3MapProjection.shortestBearingDelta(mapBearing.toDouble(), wantedBearing).toFloat()
+        mapBearing = (mapBearing + delta * BEARING_SMOOTHING + 360f) % 360f
+
+        val zoom = C3MapProjection.zoomForSpeed(navigation.speedMps)
+        val centerWorldX = C3MapProjection.longitudeToWorldX(displayedLongitude, zoom)
+        val centerWorldY = C3MapProjection.latitudeToWorldY(displayedLatitude, zoom)
+        val markerX = 650f
+        val markerY = 545f
+        val tiles = C3MapProjection.visibleTiles(displayedLatitude, displayedLongitude, zoom, DESIGN_W.toDouble(), DESIGN_H.toDouble())
+        mapTileStore?.prefetch(tiles)
+
+        canvas.save()
+        canvas.clipRect(112f, 0f, DESIGN_W, DESIGN_H)
+        canvas.rotate(-mapBearing, markerX, markerY)
+        paint.shader = null
+        paint.alpha = 255
+        paint.isFilterBitmap = true
+        paint.colorFilter = mapTileFilter
+        var visibleTileCount = 0
+        tiles.forEach { key ->
+            val bitmap = mapTileStore?.tile(key) ?: return@forEach
+            if (bitmap.isRecycled) return@forEach
+            val left = ((key.x * C3MapProjection.TILE_SIZE - centerWorldX) + markerX).toFloat()
+            val top = ((key.y * C3MapProjection.TILE_SIZE - centerWorldY) + markerY).toFloat()
+            canvas.drawBitmap(bitmap, null, RectF(left, top, left + 257f, top + 257f), paint)
+            visibleTileCount++
+        }
+        paint.colorFilter = null
+
+        // The route is independent from tile availability and always stays on
+        // top of the basemap, including during cache/network recovery.
+        if (route.size >= 2) {
+            path.reset()
+            val drawStep = (route.size / MAX_DRAW_ROUTE_POINTS).coerceAtLeast(1)
+            route.forEachIndexed { index, point ->
+                if (index != 0 && index != route.lastIndex && index % drawStep != 0) return@forEachIndexed
+                val x = (C3MapProjection.longitudeToWorldX(point.longitude, zoom) - centerWorldX + markerX).toFloat()
+                val y = (C3MapProjection.latitudeToWorldY(point.latitude, zoom) - centerWorldY + markerY).toFloat()
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            linePaint.color = ROUTE_SHADOW
+            linePaint.strokeWidth = 20f
+            linePaint.alpha = 235
+            canvas.drawPath(path, linePaint)
+            linePaint.color = ROUTE_BLUE
+            linePaint.strokeWidth = 13f
+            linePaint.alpha = 255
+            canvas.drawPath(path, linePaint)
+            linePaint.color = Color.argb(165, 196, 239, 255)
+            linePaint.strokeWidth = 3f
+            canvas.drawPath(path, linePaint)
+            linePaint.alpha = 255
+
+            route.lastOrNull()?.let { destination ->
+                val x = (C3MapProjection.longitudeToWorldX(destination.longitude, zoom) - centerWorldX + markerX).toFloat()
+                val y = (C3MapProjection.latitudeToWorldY(destination.latitude, zoom) - centerWorldY + markerY).toFloat()
+                paint.color = Color.WHITE
+                canvas.drawCircle(x, y, 19f, paint)
+                paint.color = RED
+                canvas.drawCircle(x, y, 13f, paint)
+                paint.color = Color.WHITE
+                canvas.drawCircle(x, y, 5f, paint)
+            }
+        }
+        canvas.restore()
+
+        drawNavigationMarker(canvas, markerX, markerY)
+        drawRail(canvas)
+
+        card(canvas, 132f, 18f, 864f, 116f, 27f, Color.argb(238, 8, 17, 24))
+        drawManeuverArrow(canvas, 182f, 67f, navigation.maneuver)
+        textFit(
+            canvas,
+            navigation.instruction.ifBlank { "Siga a rota" },
+            232f,
+            62f,
+            596f,
+            24f,
+            WHITE,
+            Typeface.DEFAULT_BOLD,
+        )
+        text(
+            canvas,
+            formatNavigationDistance(navigation.stepDistanceMeters),
+            232f,
+            94f,
+            14f,
+            ROUTE_LIGHT,
+            Paint.Align.LEFT,
+            Typeface.DEFAULT_BOLD,
+        )
+
+        card(canvas, 888f, 18f, 1262f, 116f, 27f, Color.argb(238, 8, 17, 24))
+        text(canvas, formatNavigationDistance(navigation.remainingDistanceMeters), 920f, 59f, 24f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, formatNavigationDuration(navigation.remainingSeconds), 1228f, 59f, 22f, ROUTE_LIGHT, Paint.Align.RIGHT, Typeface.DEFAULT_BOLD)
+        textFit(canvas, navigation.destination.ifBlank { "Destino" }, 920f, 91f, 308f, 13f, MUTED, Typeface.DEFAULT)
+
+        if (!navigation.connected) {
+            card(canvas, 888f, 130f, 1262f, 174f, 18f, Color.argb(230, 70, 43, 7))
+            text(canvas, "RECONECTANDO GPS DO IPHONE", 1075f, 159f, 12f, AMBER, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
+        } else if (visibleTileCount == 0) {
+            card(canvas, 936f, 714f, 1248f, 758f, 18f, Color.argb(220, 8, 17, 24))
+            text(canvas, "CARREGANDO RUAS…", 1092f, 743f, 12f, WHITE, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
+        }
+        text(canvas, "© OpenStreetMap  © CARTO", 1250f, 788f, 9f, Color.rgb(64, 76, 84), Paint.Align.RIGHT, Typeface.DEFAULT)
+
+        val stillMoving = kotlin.math.abs(targetLatitude - displayedLatitude) > 0.0000005 ||
+            kotlin.math.abs(targetLongitude - displayedLongitude) > 0.0000005 || kotlin.math.abs(delta) > 0.5f
+        if (stillMoving) postInvalidateDelayed(40L)
+    }
+
+    private fun drawNavigationMarker(canvas: Canvas, x: Float, y: Float) {
+        paint.setShadowLayer(8f, 0f, 3f, Color.argb(100, 0, 0, 0))
+        paint.color = Color.WHITE
+        path.reset()
+        path.moveTo(x, y - 29f)
+        path.lineTo(x + 23f, y + 23f)
+        path.lineTo(x, y + 13f)
+        path.lineTo(x - 23f, y + 23f)
+        path.close()
+        canvas.drawPath(path, paint)
+        paint.clearShadowLayer()
+        paint.color = ROUTE_BLUE
+        path.reset()
+        path.moveTo(x, y - 21f)
+        path.lineTo(x + 15f, y + 15f)
+        path.lineTo(x, y + 9f)
+        path.lineTo(x - 15f, y + 15f)
+        path.close()
+        canvas.drawPath(path, paint)
+    }
+
+    private fun drawManeuverArrow(canvas: Canvas, x: Float, y: Float, maneuver: String) {
+        linePaint.color = ROUTE_LIGHT
+        linePaint.strokeWidth = 8f
+        path.reset()
+        when {
+            maneuver.contains("left", ignoreCase = true) -> {
+                path.moveTo(x + 22f, y + 22f)
+                path.lineTo(x + 22f, y - 8f)
+                path.lineTo(x - 15f, y - 8f)
+                path.moveTo(x - 15f, y - 8f)
+                path.lineTo(x - 1f, y - 22f)
+                path.moveTo(x - 15f, y - 8f)
+                path.lineTo(x - 1f, y + 6f)
+            }
+            maneuver.contains("right", ignoreCase = true) -> {
+                path.moveTo(x - 22f, y + 22f)
+                path.lineTo(x - 22f, y - 8f)
+                path.lineTo(x + 15f, y - 8f)
+                path.moveTo(x + 15f, y - 8f)
+                path.lineTo(x + 1f, y - 22f)
+                path.moveTo(x + 15f, y - 8f)
+                path.lineTo(x + 1f, y + 6f)
+            }
+            else -> {
+                path.moveTo(x, y + 23f)
+                path.lineTo(x, y - 22f)
+                path.moveTo(x, y - 22f)
+                path.lineTo(x - 14f, y - 6f)
+                path.moveTo(x, y - 22f)
+                path.lineTo(x + 14f, y - 6f)
+            }
+        }
+        canvas.drawPath(path, linePaint)
+    }
+
+    private fun formatNavigationDistance(meters: Double): String = when {
+        !meters.isFinite() || meters <= 0.0 -> "—"
+        meters < 1_000.0 -> "${(meters / 10.0).roundToInt() * 10} m"
+        else -> String.format(Locale("pt", "BR"), "%.1f km", meters / 1_000.0)
+    }
+
+    private fun formatNavigationDuration(seconds: Double): String {
+        if (!seconds.isFinite() || seconds <= 0.0) return "—"
+        val minutes = (seconds / 60.0).roundToInt()
+        return if (minutes < 60) "$minutes min" else "${minutes / 60}h ${minutes % 60}min"
     }
 
     private fun drawStarting(canvas: Canvas) {
@@ -630,6 +874,8 @@ class DashboardView(context: Context) : View(context) {
                         distance(x, y, 1204f, 666f) < 58f -> touchAction { actions?.onNext() }
                         x in 124f..902f && y in 108f..780f -> touchAction { actions?.onMapHelp() }
                     }
+                } else if (!settingsTriggered && media.mode == DisplayMode.NAVIGATION) {
+                    if (x in 112f..1280f && y in 116f..800f) touchAction { actions?.onMapHelp() }
                 } else if (!settingsTriggered && media.mode == DisplayMode.IDLE) {
                     when {
                         x in 146f..792f && y in 120f..748f -> touchAction { actions?.onConnectionHelp() }
@@ -660,6 +906,7 @@ class DashboardView(context: Context) : View(context) {
     }
 
     override fun onDetachedFromWindow() {
+        mapTileStore?.onTileAvailable = null
         handler.removeCallbacksAndMessages(null)
         super.onDetachedFromWindow()
     }
@@ -678,5 +925,12 @@ class DashboardView(context: Context) : View(context) {
         private val RED = Color.rgb(232, 59, 69)
         private val GREEN = Color.rgb(75, 225, 145)
         private val AMBER = Color.rgb(245, 178, 66)
+        private val MAP_BACKGROUND = Color.rgb(229, 237, 240)
+        private val ROUTE_BLUE = Color.rgb(7, 169, 239)
+        private val ROUTE_LIGHT = Color.rgb(111, 215, 255)
+        private val ROUTE_SHADOW = Color.rgb(8, 56, 83)
+        private const val POSITION_SMOOTHING = 0.32
+        private const val BEARING_SMOOTHING = 0.22f
+        private const val MAX_DRAW_ROUTE_POINTS = 2_000
     }
 }

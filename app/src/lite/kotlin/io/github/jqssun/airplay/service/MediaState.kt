@@ -3,7 +3,7 @@ package io.github.jqssun.airplay.service
 import io.github.jqssun.airplay.audio.TrackInfo
 import io.github.jqssun.airplay.power.EnergySnapshot
 
-enum class DisplayMode { STARTING, IDLE, AUDIO, MIRROR, PIN, STANDBY, ERROR }
+enum class DisplayMode { STARTING, IDLE, AUDIO, MIRROR, NAVIGATION, PIN, STANDBY, ERROR }
 
 data class MediaState(
     val serverRunning: Boolean = false,
@@ -16,6 +16,7 @@ data class MediaState(
     val pin: String = "",
     val message: String = "Iniciando receptor…",
     val energy: EnergySnapshot = EnergySnapshot(),
+    val navigation: C3LinkNavigation = C3LinkNavigation(),
 )
 
 fun interface MediaStateListener {

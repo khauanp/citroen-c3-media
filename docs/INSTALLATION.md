@@ -2,11 +2,12 @@
 
 ## 1. Instalar o APK
 
-1. Copie `C3-Media-1.2.0-K00E.apk` para o tablet.
-2. Em **Configurações → Segurança**, permita a instalação de fontes desconhecidas.
-3. Abra o APK e conclua a instalação.
-4. Inicie **C3 Media**.
-5. Quando o Android perguntar qual tela inicial usar, escolha **C3 Media** e marque **Sempre**.
+1. Se a versão instalada for 1.8.1 ou anterior, desinstale-a: a fonte original e a chave dessa versão não estavam disponíveis e a 1.8.2 inicia uma nova sequência de assinatura.
+2. Copie `C3-Media-1.8.2-K00E.apk` para o tablet.
+3. Em **Configurações → Segurança**, permita a instalação de fontes desconhecidas.
+4. Abra o APK e conclua a instalação.
+5. Inicie **C3 Media**.
+6. Quando o Android perguntar qual tela inicial usar, escolha **C3 Media** e marque **Sempre**.
 
 O aplicativo abre em paisagem, oculta as barras do Android e volta a iniciar após o boot.
 
@@ -47,7 +48,15 @@ Se o endereço do tablet não for `192.168.43.1`, mantenha o logotipo Citroën p
 
 O som passa pelo tablet e sai no rádio. Quando fornecidos pelo iPhone, capa, título e artista aparecem na C3 Media. Os botões do tablet enviam play, pause, anterior e próxima faixa de volta ao iPhone.
 
-## 5. Waze
+## 5. Navegação com a tela do iPhone apagada
+
+1. Instale o `C3-Link-1.8.2-unsigned.ipa` no iPhone pelo Sideloadly.
+2. Abra o C3 Link, permita **Localização Sempre** e conecte o iPhone à rede `Citroen-C3`.
+3. Escolha ou importe o destino e inicie a rota.
+
+O C3 Link envia continuamente rota, posição, direção e instruções ao tablet. O mapa 2D permanece ativo quando o iPhone é bloqueado, porque usa a permissão de localização em segundo plano. A linha azul é desenhada separadamente dos blocos do mapa e continua visível durante carregamentos ou reconexões.
+
+## 6. Espelhamento do Waze
 
 1. Defina a rota normalmente no Waze do iPhone.
 2. Abra a Central de Controle.
@@ -56,13 +65,13 @@ O som passa pelo tablet e sai no rádio. Quando fornecidos pelo iPhone, capa, t�
 
 A tela do Waze aparece na central. Se o iPhone transmitir em formato vertical, a C3 Media gira a imagem automaticamente, preserva a proporção original e usa barras pretas quando necessário para não distorcer. O áudio também segue pelo tablet ao rádio. O controle da rota continua no iPhone.
 
-Na versão 1.2, o Waze ocupa o módulo grande à esquerda e a música fica em um módulo lateral com capa, progresso e botões. Ao trocar do Waze para YouTube/YouTube Music, o decodificador anterior é encerrado antes da nova sessão para proteger a memória do K00E.
+Na versão 1.8.2, o Waze ocupa o módulo grande à esquerda e a música fica em um módulo lateral com capa, progresso e botões. Ao encerrar o espelhamento, o codec é apenas suspenso e limpo; o receptor, a Activity e a rota continuam ativos sem fechar e reabrir a central.
 
 O espelhamento AirPlay é unidirecional: ele transporta imagem e áudio, mas não envia o toque do tablet ao iPhone. Os botões de anterior, play/pause e próxima faixa da C3 Media são tocáveis; o Waze continua sendo operado no iPhone.
 
-Sem dongle CarPlay, mantenha o Waze visível e o iPhone acordado para conservar o mapa ao vivo. Ao colocar o Waze em segundo plano ou bloquear o iPhone, o iOS deixa de transmitir a imagem do mapa; isso não pode ser contornado por um receptor AirPlay.
+Sem dongle CarPlay, o espelhamento do Waze ainda exige o iPhone acordado. Para bloquear o aparelho e manter a navegação ao vivo, use o modo nativo do C3 Link descrito acima.
 
-## 6. Espera, temperatura e alimentação contínua
+## 7. Espera, temperatura e alimentação contínua
 
 - Após 45 segundos sem o iPhone na rede, a C3 Media encerra vídeo, áudio e capa e deixa a tela praticamente preta.
 - Quando o iPhone volta à rede, a tela desperta e a animação Citroën é mostrada.
@@ -72,7 +81,7 @@ Sem dongle CarPlay, mantenha o Waze visível e o iPhone acordado para conservar 
 
 O Android 5 do K00E não oferece ao aplicativo um controle seguro do limite físico de carga. Use fonte regulada, proteção contra transientes e a ventilação planejada. Não remova a bateria nem faça jumper nos terminais.
 
-## 7. Saída do modo central
+## 8. Saída do modo central
 
 A navegação comum fica bloqueada de propósito. Para alterar Wi-Fi ou Bluetooth, mantenha o logotipo pressionado e use o PIN `0303`. Em instalação fixa, o modo de proprietário do dispositivo pode tornar o bloqueio mais rígido, mas isso é opcional e exige configuração por ADB em um Android sem contas configuradas.
 

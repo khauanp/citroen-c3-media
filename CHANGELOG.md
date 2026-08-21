@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.2 — 2026-08-21
+
+- reconstrói e publica no repositório a fonte Android correspondente à linha 1.8.x;
+- encerra o espelhamento sem destruir o `MediaCodec` de forma síncrona, evitando o fechamento e relançamento do painel no K00E;
+- mantém receptor AirPlay, C3 Link, rota e Activity independentes entre sessões de vídeo;
+- persiste a rota no tablet e a desenha sempre acima do mapa, inclusive enquanto os tiles carregam ou são recuperados;
+- reforça entrega UDP com montagem fora de ordem, confirmação, solicitação automática e reafirmação periódica da rota;
+- suaviza posição e direção no tablet usando continuamente o GPS do iPhone;
+- adota mapa 2D CARTO Voyager com maior contraste e leitura, sem o custo de renderização 3D;
+- reduz carga do K00E com cache RGB565, limite de memória, pré-carregamento controlado e rota limitada a 2.000 pontos por quadro;
+- adiciona ícone próprio completo ao C3 Link no iPhone;
+- atualiza C3 Link para 1.8.2 (build 6) e C3 Media para `versionCode 10802`.
+
 ## 1.2.0 — 2026-08-18
 
 - corrige a troca Waze → YouTube/YouTube Music encerrando e zerando o `MediaCodec` antigo antes da nova sessão;

@@ -27,6 +27,8 @@ import io.github.jqssun.airplay.audio.DmapParser
 import io.github.jqssun.airplay.audio.TrackInfo
 import io.github.jqssun.airplay.bridge.NativeBridge
 import io.github.jqssun.airplay.bridge.RaopCallbackHandler
+import io.github.jqssun.airplay.connectivity.C3LinkServer
+import io.github.jqssun.airplay.connectivity.C3MapTileStore
 import io.github.jqssun.airplay.connectivity.HotspotController
 import io.github.jqssun.airplay.discovery.NsdServiceManager
 import io.github.jqssun.airplay.power.EnergyController
@@ -39,7 +41,7 @@ import java.security.SecureRandom
 import java.util.concurrent.CopyOnWriteArraySet
 import kotlin.math.roundToInt
 
-class AirPlayService : Service(), RaopCallbackHandler {
+class AirPlayService : Service(), RaopCallbackHandler, C3LinkServer.Listener {
     private val binder = LocalBinder()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val listeners = CopyOnWriteArraySet<MediaStateListener>()
@@ -61,9 +63,19 @@ class AirPlayService : Service(), RaopCallbackHandler {
     @Volatile private var startupPending = false
     private lateinit var hotspotController: HotspotController
     private lateinit var energyController: EnergyController
+    lateinit var mapTileStore: C3MapTileStore
+        private set
+    private lateinit var c3LinkServer: C3LinkServer
+    @Volatile private var mirrorActive = false
     @Volatile private var state = MediaState()
     @Volatile private var progressBaseMs = 0L
     @Volatile private var progressBaseAt = 0L
+    private val mirrorFallback = Runnable {
+        if (!mirrorActive) return@Runnable
+        mirrorActive = false
+        videoRenderer.suspendStream()
+        updateState(state.copy(mode = fallbackDisplayMode(), message = fallbackMessage()))
+    }
 
     inner class LocalBinder : Binder() {
         val service: AirPlayService get() = this@AirPlayService
@@ -76,12 +88,18 @@ class AirPlayService : Service(), RaopCallbackHandler {
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         dacp = DacpController(this)
         hotspotController = HotspotController(this)
+        mapTileStore = C3MapTileStore(this)
+        c3LinkServer = C3LinkServer(this, this)
+        mapTileStore.onTilesRequested = c3LinkServer::requestTiles
         energyController = EnergyController(
             this,
             hotspotController,
-            isStreaming = { state.connectionCount > 0 || state.mode == DisplayMode.MIRROR || state.playing },
+            isStreaming = {
+                state.connectionCount > 0 || mirrorActive || state.playing || state.navigation.route.size >= 2
+            },
             listener = ::applyEnergySnapshot,
         )
+        c3LinkServer.start()
         createNotificationChannel()
         promoteToForeground()
         startupPending = true
@@ -158,7 +176,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     @SuppressLint("WakelockTimeout")
     private fun startServer() {
         if (nativeHandle != 0L) return
-        updateState(MediaState(mode = DisplayMode.STARTING, message = "Preparando conexão com o iPhone…"))
+        updateState(state.copy(mode = DisplayMode.STARTING, message = "Preparando conexão com o iPhone…"))
         try {
             val power = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "c3media:receiver").apply {
@@ -198,13 +216,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
             val serverName = NativeBridge.nativeGetServerName(handle) ?: RECEIVER_NAME
             nsd?.registerRaop(raopName, port, raop)
             nsd?.registerAirplay(serverName, port, airplay)
-            updateState(
-                MediaState(
-                    serverRunning = true,
-                    mode = DisplayMode.IDLE,
-                    message = "Pronto para conectar",
-                ),
-            )
+            updateState(state.copy(serverRunning = true, mode = fallbackDisplayMode(), message = fallbackMessage()))
             Log.i(TAG, "AirPlay ready on port $port")
         } catch (error: Throwable) {
             Log.e(TAG, "AirPlay startup failed", error)
@@ -221,7 +233,16 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     override fun onVideoData(data: ByteArray, ntpTimeNs: Long, isH265: Boolean) {
         energyController.noteActivity()
-        videoRenderer.feedFrame(data, ntpTimeNs, isH265)
+        mainHandler.removeCallbacks(mirrorFallback)
+        val becameActive = !mirrorActive
+        mirrorActive = true
+        try {
+            videoRenderer.feedFrame(data, ntpTimeNs, isH265)
+        } catch (error: RuntimeException) {
+            Log.e(TAG, "Video frame rejected without restarting the receiver", error)
+            videoRenderer.suspendStream()
+        }
+        if (becameActive) updateState(state.copy(mode = DisplayMode.MIRROR, message = "Espelhamento ativo"))
     }
 
     /** Called by the native audio engine; kept public because JNI resolves it by name. */
@@ -237,6 +258,8 @@ class AirPlayService : Service(), RaopCallbackHandler {
         audioRenderer.start()
         audioRenderer.setFormat(ct, spf)
         if (usingScreen) {
+            mirrorActive = true
+            mainHandler.removeCallbacks(mirrorFallback)
             updateState(state.copy(mode = DisplayMode.MIRROR, playing = true, message = "Waze no iPhone"))
         } else {
             progressBaseAt = SystemClock.elapsedRealtime()
@@ -247,6 +270,8 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onVideoSize(srcW: Float, srcH: Float, w: Float, h: Float) {
         energyController.noteActivity()
         if (w > 0 && h > 0) {
+            mirrorActive = true
+            mainHandler.removeCallbacks(mirrorFallback)
             videoRenderer.setResolution(w.toInt(), h.toInt())
             updateState(state.copy(mode = DisplayMode.MIRROR, message = "Espelhamento ativo"))
         }
@@ -289,18 +314,16 @@ class AirPlayService : Service(), RaopCallbackHandler {
         val count = (state.connectionCount - 1).coerceAtLeast(0)
         if (count == 0) {
             audioRenderer.stop()
-            videoRenderer.resetStream()
             dacp.reset()
             progressBaseMs = 0L
             progressBaseAt = 0L
-            updateState(
-                MediaState(
-                    serverRunning = nativeHandle != 0L,
-                    mode = DisplayMode.IDLE,
-                    message = "Pronto para conectar",
-                    energy = state.energy,
-                ),
-            )
+            if (mirrorActive) {
+                mainHandler.removeCallbacks(mirrorFallback)
+                mainHandler.postDelayed(mirrorFallback, MIRROR_END_GRACE_MS)
+                updateState(state.copy(connectionCount = 0, playing = false, message = "Finalizando espelhamento…"))
+            } else {
+                updateState(state.copy(connectionCount = 0, playing = false, mode = fallbackDisplayMode(), message = fallbackMessage()))
+            }
         } else {
             updateState(state.copy(connectionCount = count))
         }
@@ -363,9 +386,11 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     override fun onAudioOnly(audioOnly: Boolean) {
         if (audioOnly && state.connectionCount > 0) {
-            videoRenderer.resetStream()
-            updateState(state.copy(mode = DisplayMode.AUDIO, message = "Reproduzindo do iPhone"))
+            mainHandler.removeCallbacks(mirrorFallback)
+            mainHandler.postDelayed(mirrorFallback, MIRROR_END_GRACE_MS)
         } else if (!audioOnly && state.connectionCount > 0) {
+            mirrorActive = true
+            mainHandler.removeCallbacks(mirrorFallback)
             updateState(state.copy(mode = DisplayMode.MIRROR, message = "Espelhamento ativo"))
         }
     }
@@ -380,32 +405,64 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onVideoScrub(positionSeconds: Float) = Unit
     override fun onVideoRate(rate: Float) = Unit
     override fun onVideoStop() {
-        // iOS closes the mirroring decoder before opening YouTube/YouTube Music.
-        // Keeping that API-21 codec alive caused memory pressure and vendor codec
-        // crashes which could take down the HOME activity as well.
-        videoRenderer.resetStream()
-        val nextMode = if (state.playing || state.track.title.isNotBlank()) {
-            DisplayMode.AUDIO
-        } else {
-            DisplayMode.IDLE
-        }
-        updateState(state.copy(mode = nextMode, message = if (nextMode == DisplayMode.AUDIO) {
-            "Música do iPhone"
-        } else {
-            "Pronto para conectar"
-        }))
+        // Never tear down the vendor MediaCodec synchronously from the native
+        // AirPlay callback. On the K00E that transition can kill the HOME task.
+        mainHandler.removeCallbacks(mirrorFallback)
+        mainHandler.postDelayed(mirrorFallback, MIRROR_END_GRACE_MS)
     }
     override fun onVideoSessionPoll() = Unit
 
-    private fun audioUpdateMode(): DisplayMode =
-        if (state.mode == DisplayMode.MIRROR) DisplayMode.MIRROR else DisplayMode.AUDIO
+    override fun onNavigationChanged(navigation: C3LinkNavigation) {
+        mainHandler.post {
+            if (navigation.route.size >= 2) energyController.noteActivity()
+            val nextMode = when {
+                mirrorActive -> DisplayMode.MIRROR
+                navigation.route.size >= 2 -> DisplayMode.NAVIGATION
+                state.playing || state.track.title.isNotBlank() -> DisplayMode.AUDIO
+                else -> DisplayMode.IDLE
+            }
+            val nextMessage = when (nextMode) {
+                DisplayMode.NAVIGATION -> if (navigation.connected) "Navegação C3 ativa" else "Reconectando o GPS do iPhone…"
+                DisplayMode.AUDIO -> "Música do iPhone"
+                DisplayMode.MIRROR -> "Espelhamento ativo"
+                else -> if (navigation.connected) "C3 Link pronto para uma rota" else "Pronto para conectar"
+            }
+            updateState(state.copy(mode = nextMode, message = nextMessage, navigation = navigation))
+        }
+    }
+
+    override fun onMapTileChunk(chunk: MapTileChunk) {
+        mapTileStore.accept(chunk)
+    }
+
+    override fun onMapTileUnavailable(key: MapTileKey) {
+        mapTileStore.reportUnavailable(key)
+    }
+
+    private fun audioUpdateMode(): DisplayMode = if (mirrorActive) DisplayMode.MIRROR else fallbackDisplayMode()
+
+    private fun fallbackDisplayMode(): DisplayMode = when {
+        mirrorActive -> DisplayMode.MIRROR
+        state.navigation.route.size >= 2 -> DisplayMode.NAVIGATION
+        state.playing || state.track.title.isNotBlank() -> DisplayMode.AUDIO
+        else -> DisplayMode.IDLE
+    }
+
+    private fun fallbackMessage(): String = when (fallbackDisplayMode()) {
+        DisplayMode.NAVIGATION -> "Navegação C3 ativa"
+        DisplayMode.AUDIO -> "Música do iPhone"
+        DisplayMode.MIRROR -> "Espelhamento ativo"
+        else -> if (state.navigation.connected) "C3 Link pronto para uma rota" else "Pronto para conectar"
+    }
 
     private fun applyEnergySnapshot(snapshot: EnergySnapshot) {
         val previous = state.energy.mode
         when (snapshot.mode) {
             EnergyMode.STANDBY -> {
                 if (previous != EnergyMode.STANDBY) {
-                    videoRenderer.resetStream()
+                    mirrorActive = false
+                    mainHandler.removeCallbacks(mirrorFallback)
+                    videoRenderer.suspendStream()
                     audioRenderer.stop()
                     progressBaseAt = 0L
                     val art = state.track.coverArt
@@ -428,7 +485,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
                 if (previous == EnergyMode.STANDBY) {
                     updateState(
                         state.copy(
-                            mode = DisplayMode.IDLE,
+                            mode = fallbackDisplayMode(),
                             message = if (snapshot.thermalLimited) "Proteção térmica ativa" else "iPhone detectado",
                             energy = snapshot,
                         ),
@@ -584,7 +641,10 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(mirrorFallback)
         listeners.clear()
+        c3LinkServer.stop()
+        mapTileStore.close()
         energyController.stop()
         dacp.release()
         audioRenderer.stop()
@@ -609,5 +669,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
         private const val COVER_DECODE_LIMIT = 512
         private const val COVER_DISPLAY_LIMIT = 384
         private const val LOW_MEMORY_MB = 96L
+        private const val MIRROR_END_GRACE_MS = 1_200L
     }
 }

@@ -100,6 +100,10 @@ class VideoRenderer {
         synchronized(lock) {
             if (videoWidth == 0 || videoHeight == 0) return
 
+            // After a mirroring pause the configured decoder is retained, but
+            // decoding must resume from a fresh keyframe.
+            if (codec != null && !firstFrameQueued && !_isKeyframe(data, isH265)) return
+
             if (codec == null || isH265 != currentH265) {
                 // a stale reference frame decodes to corruption, so wait for a keyframe to (re)start
                 if (!_isKeyframe(data, isH265)) {
@@ -241,6 +245,28 @@ class VideoRenderer {
         videoWidth = 0
         videoHeight = 0
         currentH265 = false
+    }
+
+    /**
+     * Pauses mirroring without calling MediaCodec.stop()/release(). The Intel
+     * Android 5 vendor codec may abort the process during that synchronous
+     * teardown. Retaining and flushing it keeps the HOME activity alive and
+     * lets the next AirPlay session resume from its first keyframe.
+     */
+    fun suspendStream() = synchronized(lock) {
+        _frameIntervalIdx = 0
+        _frameIntervalCount = 0
+        _lastOutputFrameNs = 0L
+        _ptsBaseUs = Long.MIN_VALUE
+        _wallBaseNs = 0L
+        firstFrameQueued = false
+        try {
+            codec?.flush()
+        } catch (error: RuntimeException) {
+            // Do not fall back to stop()/release() here; keeping the dashboard
+            // process alive is more important than reclaiming this codec now.
+            Log.w(TAG, "Codec pause ignored to preserve dashboard process", error)
+        }
     }
 
     private fun drainOutput() {

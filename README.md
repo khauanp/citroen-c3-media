@@ -10,9 +10,11 @@ Central multimídia feita para o **ASUS K00E / Fonepad 7**, com Android 5.0 (API
 - áudio recebido no tablet e encaminhado pelo Android ao rádio conectado por Bluetooth A2DP;
 - título, artista, álbum, capa, duração e controles quando o iPhone envia os metadados;
 - espelhamento do iPhone para exibir o Waze e qualquer rota definida no celular;
+- mapa 2D nativo com GPS contínuo do iPhone, rota azul persistente e funcionamento com a tela do celular apagada;
+- mapa CARTO Voyager de alto contraste com cache leve, sem renderização 3D;
 - rotação automática de telas verticais e ajuste proporcional sem esticar a imagem;
 - painel modular com Waze à esquerda e música/controles em um card lateral;
-- liberação segura do decodificador ao alternar Waze e YouTube/YouTube Music;
+- suspensão segura do decodificador ao encerrar o espelhamento, sem fechar e reabrir o painel;
 - espera automática, proteção térmica, monitor de bateria/memória e recuperação de falhas;
 - tela de abertura Citroën, modo paisagem, interface 1280×800, fontes e áreas de toque ampliadas;
 - abertura no boot, opção de launcher padrão e modo quiosque;
@@ -31,7 +33,7 @@ O iPhone continua sendo o aparelho onde YouTube Music e Waze rodam. Isso evita d
 
 ## Instalação
 
-O APK assinado da versão 1.2.0 é distribuído separadamente do código-fonte. O passo a passo completo está em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+O APK da versão 1.8.2 usa uma nova assinatura criada durante a recuperação do projeto. A primeira instalação exige remover a versão 1.8.1; as atualizações seguintes poderão ser instaladas normalmente por cima. O passo a passo completo está em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
 
 ## Compatibilidade alvo
 
