@@ -31,7 +31,7 @@ O iPhone continua sendo o aparelho onde YouTube Music e Waze rodam. Isso evita d
 
 ## Instalação
 
-O APK assinado da versão 1.2.0 é distribuído separadamente do código-fonte. O passo a passo completo está em [`docs/INSTALLATION.md`](docs/INSTALLATION.md).
+A correção 1.8.3 do tablet é reconstruída diretamente sobre o APK real 1.8.1, mantendo a interface e o player originais. O C3 Link 1.8.3 é compilado a partir do fonte exato do iPhone 1.8.1. Veja o escopo e o roteiro de validação em [`docs/MAP-ONLY-1.8.3.md`](docs/MAP-ONLY-1.8.3.md).
 
 ## Compatibilidade alvo
 
@@ -46,7 +46,9 @@ O APK assinado da versão 1.2.0 é distribuído separadamente do código-fonte. 
 
 Este APK contém somente bibliotecas x86 de 32 bits de propósito: é uma versão específica para o tablet do projeto, não para publicação na Play Store.
 
-## Build
+## Build do código Android antigo
+
+> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.3.
 
 Pré-requisitos: JDK 17, Android SDK 36, Android SDK Platform 21, Build Tools 35+, CMake e NDK `27.0.12077973`.
 
@@ -56,6 +58,8 @@ git submodule update --init --recursive
 ```
 
 O APK sai em `app/build/outputs/apk/debug/app-debug.apk`.
+
+O workflow `.github/workflows/apk.yml` baixa o APK 1.8.1 exato, confere seu SHA-256, aplica somente a correção do servidor do mapa e reprova o build se qualquer código de interface ou mídia mudar.
 
 ## Estado e continuidade
 

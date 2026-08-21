@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.3 — 2026-08-21
+
+- usa o APK real `C3-Media-1.8.1-K00E.apk` como base binária do tablet; o código Android antigo do repositório não participa do build;
+- preserva, por comparação automática de todo o APK desmontado, a interface, o player, os recursos e a biblioteca nativa da 1.8.1;
+- mantém a rota ativa no tablet durante pausas curtas do UDP, sem alterar os comandos explícitos de encerrar navegação;
+- envia a rota completa e também em partes pequenas, espaçadas e reenviadas, para que a linha azul não dependa de um único pacote;
+- mantém o GPS de navegação do iPhone em alta precisão, inclusive com a tela apagada, e reforça rota e posição a cada 15 segundos;
+- aumenta o contraste dos mesmos tiles 2D do OpenStreetMap antes de transmiti-los, sem exigir renderização 3D do K00E;
+- adiciona um ícone próprio ao C3 Link no iPhone.
+
 ## 1.2.0 — 2026-08-18
 
 - corrige a troca Waze → YouTube/YouTube Music encerrando e zerando o `MediaCodec` antigo antes da nova sessão;

@@ -1,0 +1,43 @@
+name: C3Link
+options:
+  bundleIdPrefix: com.c3media
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  C3Link:
+    type: application
+    platform: iOS
+    sources:
+      - path: C3Link
+        excludes:
+          - Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.c3media.c3link
+        PRODUCT_NAME: C3 Link
+        PRODUCT_MODULE_NAME: C3Link
+        MARKETING_VERSION: 1.8.3
+        CURRENT_PROJECT_VERSION: 7
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: C3Link/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+    scheme:
+      gatherCoverageData: false
+      testTargets:
+        - C3LinkTests
+  C3LinkTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: C3LinkTests
+    dependencies:
+      - target: C3Link
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.c3media.c3link.tests
+        SWIFT_VERSION: 5.0
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/C3 Link.app/C3 Link"
+        BUNDLE_LOADER: "$(TEST_HOST)"
