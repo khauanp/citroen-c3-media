@@ -12,8 +12,8 @@ class AudioRenderer {
         if (handle != 0L) {
             NativeBridge.nativeServerAudioConfigure(
                 handle,
-                0,
-                95,
+                220,
+                99,
                 0,
                 false,
                 true,

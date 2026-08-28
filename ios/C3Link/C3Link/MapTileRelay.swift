@@ -1,4 +1,3 @@
-import CoreImage
 import Foundation
 import UIKit
 
@@ -88,7 +87,16 @@ final class MapTileRelay {
                 return
             }
             guard isCurrent(requestGeneration) else { return }
-            let displayData = highContrastPNG(from: data) ?? data
+            // Relay the validated server PNG byte-for-byte. Core Image tile filters
+            // intermittently produced opaque black 256px images on long sessions and
+            // competed with Waze/music for GPU time on the iPhone.
+            guard let tile = UIImage(data: data),
+                  Int(tile.size.width * tile.scale) == Self.tilePixels,
+                  Int(tile.size.height * tile.scale) == Self.tilePixels else {
+                transport?.sendTileError(key)
+                return
+            }
+            let displayData = data
             let expiry = expiryEpochSeconds(from: http)
             let transferId = UUID().uuidString
             let partCount = Int(ceil(Double(displayData.count) / Double(Self.chunkBytes)))
@@ -111,7 +119,7 @@ final class MapTileRelay {
                 )
                 // Keep route and GPS packets responsive while a map tile is
                 // being transferred over the tablet hotspot.
-                try? await Task.sleep(nanoseconds: 1_500_000)
+                try? await Task.sleep(nanoseconds: 2_000_000)
             }
         } catch {
             // Cancellation belongs to an old route/generation. Do not poison a
@@ -126,25 +134,6 @@ final class MapTileRelay {
         lock.lock()
         defer { lock.unlock() }
         return requestGeneration == generation
-    }
-
-    private func highContrastPNG(from data: Data) -> Data? {
-        guard let image = CIImage(data: data) else { return nil }
-        let contrasted = image.applyingFilter("CIColorControls", parameters: [
-            kCIInputSaturationKey: 0.78,
-            kCIInputContrastKey: 1.42,
-        ])
-        let toned = contrasted.applyingFilter("CIColorMatrix", parameters: [
-            "inputRVector": CIVector(x: 0.76, y: 0, z: 0, w: 0),
-            "inputGVector": CIVector(x: 0, y: 0.76, z: 0, w: 0),
-            "inputBVector": CIVector(x: 0, y: 0, z: 0.76, w: 0),
-            "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
-            "inputBiasVector": CIVector(x: 0.039, y: 0.039, z: 0.039, w: 0),
-        ])
-        guard let cgImage = Self.imageContext.createCGImage(toned, from: image.extent),
-              let png = UIImage(cgImage: cgImage).pngData(),
-              png.count <= Self.maximumTileBytes else { return nil }
-        return png
     }
 
     private func expiryEpochSeconds(from response: HTTPURLResponse) -> Int64 {
@@ -172,10 +161,11 @@ final class MapTileRelay {
     }()
 
     private static let pngSignature = Data([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    // Static properties initialize lazily. Do not touch Core Image during app
-    // launch, music playback or a navigation session that already has tiles.
-    private static let imageContext = CIContext(options: [.cacheIntermediates: false])
-    private static let chunkBytes = 900
+    private static let tilePixels = 256
+    // Base64 + JSON must remain comfortably below the Wi-Fi MTU. The old
+    // 900-byte chunks could be fragmented and disappear precisely while the
+    // car was moving and AirPlay/Waze were using the same link.
+    private static let chunkBytes = 700
     private static let maximumTileBytes = 512 * 1024
     private static let minimumCacheSeconds: TimeInterval = 7 * 24 * 60 * 60
 }

@@ -31,7 +31,7 @@ O iPhone continua sendo o aparelho onde YouTube Music e Waze rodam. Isso evita d
 
 ## Instalação
 
-A 1.8.7 trata especificamente a diferença descoberta entre rotas curtas e longas. O C3 Link calcula uma rota automobilística no MapKit, envia todos os pontos em até 512 partes e o tablet confere CRC32, contagem e decodificação completa antes de exibir “rota confirmada”. Radares e limites conhecidos vêm do OpenStreetMap; limite ausente não é inventado. O APK continua reconstruído sobre a 1.8.1 real, preservando interface e player. Veja [`docs/NAVIGATION-1.8.7.md`](docs/NAVIGATION-1.8.7.md).
+A 1.8.8 mantém a navegação automobilística, a rota integral, os radares e os limites da 1.8.7 e corrige o carregamento visual durante o deslocamento. Tiles ausentes usam temporariamente a região equivalente do nível anterior, os pacotes ficam abaixo do MTU e o filtro pesado do iPhone foi removido. A versão também amplia a tolerância dos buffers de áudio/vídeo e conecta os botões físicos do rádio ao DACP do iPhone. O APK continua reconstruído sobre a 1.8.1 real, preservando interface e player. Veja [`docs/NAVIGATION-1.8.7.md`](docs/NAVIGATION-1.8.7.md).
 
 ## Compatibilidade alvo
 
@@ -48,7 +48,7 @@ Este APK contém somente bibliotecas x86 de 32 bits de propósito: é uma versã
 
 ## Build do código Android antigo
 
-> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.7.
+> **Atenção:** esta seção descreve apenas o projeto Android histórico. Ele não gera a interface real da C3 Media 1.8.1 e não deve ser usado como base da 1.8.8.
 
 Pré-requisitos: JDK 17, Android SDK 36, Android SDK Platform 21, Build Tools 35+, CMake e NDK `27.0.12077973`.
 

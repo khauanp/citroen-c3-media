@@ -24,6 +24,7 @@ import io.github.jqssun.airplay.MainActivity
 import io.github.jqssun.airplay.R
 import io.github.jqssun.airplay.audio.DacpController
 import io.github.jqssun.airplay.audio.DmapParser
+import io.github.jqssun.airplay.audio.RadioMediaSession
 import io.github.jqssun.airplay.audio.TrackInfo
 import io.github.jqssun.airplay.bridge.NativeBridge
 import io.github.jqssun.airplay.bridge.RaopCallbackHandler
@@ -54,6 +55,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     private lateinit var audioManager: AudioManager
     private lateinit var dacp: DacpController
+    private lateinit var radioMediaSession: RadioMediaSession
     private var nativeHandle = 0L
     private var nsd: NsdServiceManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -64,6 +66,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     @Volatile private var state = MediaState()
     @Volatile private var progressBaseMs = 0L
     @Volatile private var progressBaseAt = 0L
+    private var disconnectGeneration = 0
 
     inner class LocalBinder : Binder() {
         val service: AirPlayService get() = this@AirPlayService
@@ -75,6 +78,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         dacp = DacpController(this)
+        radioMediaSession = RadioMediaSession(this)
         hotspotController = HotspotController(this)
         energyController = EnergyController(
             this,
@@ -234,8 +238,8 @@ class AirPlayService : Service(), RaopCallbackHandler {
         audioManager.mode = AudioManager.MODE_NORMAL
         @Suppress("DEPRECATION")
         audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-        audioRenderer.start()
         audioRenderer.setFormat(ct, spf)
+        audioRenderer.start()
         if (usingScreen) {
             updateState(state.copy(mode = DisplayMode.MIRROR, playing = true, message = "Waze no iPhone"))
         } else {
@@ -277,32 +281,41 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     override fun onConnectionInit() {
         energyController.noteActivity()
-        updateState(
-            state.copy(
-                connectionCount = state.connectionCount + 1,
-                message = "iPhone conectado",
-            ),
-        )
+        mainHandler.post {
+            disconnectGeneration += 1
+            updateState(
+                state.copy(
+                    connectionCount = state.connectionCount + 1,
+                    message = "iPhone conectado",
+                ),
+            )
+        }
     }
 
     override fun onConnectionDestroy() {
-        val count = (state.connectionCount - 1).coerceAtLeast(0)
-        if (count == 0) {
-            audioRenderer.stop()
-            videoRenderer.resetStream()
-            dacp.reset()
-            progressBaseMs = 0L
-            progressBaseAt = 0L
-            updateState(
-                MediaState(
-                    serverRunning = nativeHandle != 0L,
-                    mode = DisplayMode.IDLE,
-                    message = "Pronto para conectar",
-                    energy = state.energy,
-                ),
-            )
-        } else {
+        mainHandler.post {
+            val count = (state.connectionCount - 1).coerceAtLeast(0)
+            disconnectGeneration += 1
+            val generation = disconnectGeneration
             updateState(state.copy(connectionCount = count))
+            if (count == 0) {
+                mainHandler.postDelayed({
+                    if (generation != disconnectGeneration || state.connectionCount != 0) return@postDelayed
+                    audioRenderer.stop()
+                    videoRenderer.resetStream()
+                    dacp.reset()
+                    progressBaseMs = 0L
+                    progressBaseAt = 0L
+                    updateState(
+                        MediaState(
+                            serverRunning = nativeHandle != 0L,
+                            mode = DisplayMode.IDLE,
+                            message = "Pronto para conectar",
+                            energy = state.energy,
+                        ),
+                    )
+                }, CONNECTION_GRACE_MS)
+            }
         }
     }
 
@@ -334,9 +347,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
         if (state.energy.thermalLimited || state.energy.availableMemoryMb in 1..LOW_MEMORY_MB) return
         val art = decodeCoverArt(data) ?: return
         mainHandler.post {
-            val previous = state.track.coverArt
             updateState(state.copy(track = state.track.copy(coverArt = art)))
-            if (previous != null && previous !== art && !previous.isRecycled) previous.recycle()
         }
     }
 
@@ -408,7 +419,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
                     videoRenderer.resetStream()
                     audioRenderer.stop()
                     progressBaseAt = 0L
-                    val art = state.track.coverArt
                     updateState(
                         state.copy(
                             mode = DisplayMode.STANDBY,
@@ -418,7 +428,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
                             energy = snapshot,
                         ),
                     )
-                    if (art != null && !art.isRecycled) art.recycle()
                 } else {
                     updateState(state.copy(energy = snapshot))
                 }
@@ -488,6 +497,9 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     private fun updateState(next: MediaState) {
         synchronized(stateLock) { state = next }
+        if (::radioMediaSession.isInitialized) {
+            radioMediaSession.update(next.track, next.playing, next.positionMs)
+        }
         mainHandler.post {
             val current = snapshot()
             listeners.forEach { listener ->
@@ -586,6 +598,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onDestroy() {
         listeners.clear()
         energyController.stop()
+        if (::radioMediaSession.isInitialized) radioMediaSession.release()
         dacp.release()
         audioRenderer.stop()
         releaseNative()
@@ -609,5 +622,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
         private const val COVER_DECODE_LIMIT = 512
         private const val COVER_DISPLAY_LIMIT = 384
         private const val LOW_MEMORY_MB = 96L
+        private const val CONNECTION_GRACE_MS = 3_000L
     }
 }
