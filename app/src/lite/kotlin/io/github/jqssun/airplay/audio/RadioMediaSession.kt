@@ -5,8 +5,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
-import android.media.MediaMetadata
-import android.media.RemoteControlClient
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Handler
@@ -18,8 +16,12 @@ import io.github.jqssun.airplay.service.MediaState
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Publishes C3 Media as the active player so the radio's AVRCP buttons can
- * control the iPhone through DACP. Android 5 provides this API natively.
+ * Publishes only transport state to Android 5 and routes radio keys to DACP.
+ *
+ * Do not combine MediaSession with RemoteControlClient on the K00E. The ASUS
+ * Android-5 Bluetooth stack treats them as two competing AVRCP players and can
+ * terminate the app when iOS changes metadata. Song text/cover remains owned by
+ * the C3 dashboard; the radio integration only needs playback state and keys.
  */
 class RadioMediaSession(private val service: AirPlayService) {
     private val worker = HandlerThread("C3MediaRadio", Process.THREAD_PRIORITY_BACKGROUND).apply { start() }
@@ -32,11 +34,9 @@ class RadioMediaSession(private val service: AirPlayService) {
         Intent(Intent.ACTION_MEDIA_BUTTON).setComponent(receiver),
         PendingIntent.FLAG_UPDATE_CURRENT,
     )
-    private val session = MediaSession(service, "C3MediaRadio")
-    @Suppress("DEPRECATION")
-    private val remoteControlClient = RemoteControlClient(mediaButtonIntent)
-    private var lastTrack = TrackInfo()
+    private val session: MediaSession? = runCatching { MediaSession(service, "C3MediaRadio") }.getOrNull()
     private var lastPlaying = false
+    private var lastPublishedPositionMs = Long.MIN_VALUE
     @Volatile private var pendingUpdate: PublishedState? = null
     private val updateQueued = AtomicBoolean(false)
     private val released = AtomicBoolean(false)
@@ -44,88 +44,66 @@ class RadioMediaSession(private val service: AirPlayService) {
     init {
         RadioButtonReceiver.attach(this)
         runCatching {
-            session.setFlags(
-                MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS,
-            )
-            session.setMediaButtonReceiver(mediaButtonIntent)
-            session.setCallback(object : MediaSession.Callback() {
-                override fun onPlay() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
-                override fun onPause() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
-                override fun onSkipToNext() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
-                override fun onSkipToPrevious() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
-            }, handler)
-            session.isActive = true
+            session?.apply {
+                setFlags(
+                    MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
+                        MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS,
+                )
+                setMediaButtonReceiver(mediaButtonIntent)
+                setCallback(object : MediaSession.Callback() {
+                    override fun onPlay() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PLAY)
+                    override fun onPause() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PAUSE)
+                    override fun onSkipToNext() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
+                    override fun onSkipToPrevious() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+                }, handler)
+                isActive = true
+            }
         }
         @Suppress("DEPRECATION")
-        runCatching {
-            audioManager.registerMediaButtonEventReceiver(receiver)
-            remoteControlClient.setTransportControlFlags(
-                RemoteControlClient.FLAG_KEY_MEDIA_PLAY or
-                    RemoteControlClient.FLAG_KEY_MEDIA_PAUSE or
-                    RemoteControlClient.FLAG_KEY_MEDIA_PLAY_PAUSE or
-                    RemoteControlClient.FLAG_KEY_MEDIA_NEXT or
-                    RemoteControlClient.FLAG_KEY_MEDIA_PREVIOUS,
-            )
-            audioManager.registerRemoteControlClient(remoteControlClient)
-        }
-        applyUpdate(TrackInfo(), false, 0L)
+        runCatching { audioManager.registerMediaButtonEventReceiver(receiver) }
+        update(TrackInfo(), false, 0L)
     }
 
     fun update(state: MediaState) = update(state.track, state.playing, state.positionMs)
 
+    @Suppress("UNUSED_PARAMETER")
     fun update(track: TrackInfo, playing: Boolean, positionMs: Long) {
         if (released.get()) return
-        pendingUpdate = PublishedState(track, playing, positionMs)
+        // Never retain TrackInfo here: it carries the cover Bitmap. Keeping radio
+        // publication primitive-only isolates track changes from the old BT stack.
+        pendingUpdate = PublishedState(playing, positionMs.coerceAtLeast(0L))
         if (!updateQueued.compareAndSet(false, true)) return
         handler.post {
             do {
                 val current = pendingUpdate
                 pendingUpdate = null
-                if (current != null) applyUpdate(current.track, current.playing, current.positionMs)
+                if (current != null) applyUpdate(current)
                 updateQueued.set(false)
             } while (pendingUpdate != null && updateQueued.compareAndSet(false, true))
         }
     }
 
-    private fun applyUpdate(track: TrackInfo, playing: Boolean, positionMs: Long) {
-        if (track != lastTrack) {
-            runCatching {
-                session.setMetadata(
-                    MediaMetadata.Builder()
-                        .putString(MediaMetadata.METADATA_KEY_TITLE, track.title.ifBlank { "C3 Media" })
-                        .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artist.ifBlank { "iPhone" })
-                        .putString(MediaMetadata.METADATA_KEY_ALBUM, track.album)
-                        .putLong(MediaMetadata.METADATA_KEY_DURATION, track.durationMs)
-                        .build(),
-                )
-            }
-            lastTrack = track
+    private fun applyUpdate(state: PublishedState) {
+        val positionChanged = lastPublishedPositionMs == Long.MIN_VALUE ||
+            kotlin.math.abs(state.positionMs - lastPublishedPositionMs) >= POSITION_REFRESH_MS
+        if (state.playing == lastPlaying && !positionChanged) return
+        val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
+            PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or
+            PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        runCatching {
+            session?.setPlaybackState(
+                PlaybackState.Builder()
+                    .setActions(actions)
+                    .setState(
+                        if (state.playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
+                        state.positionMs,
+                        if (state.playing) 1f else 0f,
+                    )
+                    .build(),
+            )
         }
-        if (playing != lastPlaying || positionMs == 0L) {
-            val actions = PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
-                PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or
-                PlaybackState.ACTION_SKIP_TO_PREVIOUS
-            runCatching {
-                session.setPlaybackState(
-                    PlaybackState.Builder()
-                        .setActions(actions)
-                        .setState(
-                            if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED,
-                            positionMs,
-                            if (playing) 1f else 0f,
-                        )
-                        .build(),
-                )
-                @Suppress("DEPRECATION")
-                remoteControlClient.setPlaybackState(
-                    if (playing) RemoteControlClient.PLAYSTATE_PLAYING else RemoteControlClient.PLAYSTATE_PAUSED,
-                    positionMs,
-                    if (playing) 1f else 0f,
-                )
-            }
-            lastPlaying = playing
-        }
+        lastPlaying = state.playing
+        lastPublishedPositionMs = state.positionMs
     }
 
     fun dispatchMediaKey(keyCode: Int) {
@@ -146,20 +124,19 @@ class RadioMediaSession(private val service: AirPlayService) {
         if (!released.compareAndSet(false, true)) return
         RadioButtonReceiver.detach(this)
         @Suppress("DEPRECATION")
+        runCatching { audioManager.unregisterMediaButtonEventReceiver(receiver) }
         runCatching {
-            audioManager.unregisterRemoteControlClient(remoteControlClient)
-            audioManager.unregisterMediaButtonEventReceiver(receiver)
+            session?.isActive = false
+            session?.release()
         }
-        runCatching {
-            session.isActive = false
-            session.release()
-        }
+        pendingUpdate = null
+        handler.removeCallbacksAndMessages(null)
         worker.quitSafely()
     }
 
-    private data class PublishedState(
-        val track: TrackInfo,
-        val playing: Boolean,
-        val positionMs: Long,
-    )
+    private data class PublishedState(val playing: Boolean, val positionMs: Long)
+
+    private companion object {
+        const val POSITION_REFRESH_MS = 5_000L
+    }
 }

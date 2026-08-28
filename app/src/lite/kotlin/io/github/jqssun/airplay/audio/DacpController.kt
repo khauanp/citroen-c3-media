@@ -27,11 +27,16 @@ class DacpController(context: Context) {
 
     fun update(dacpId: String, remote: String) {
         val nextName = if (dacpId.isBlank()) "" else "iTunes_Ctrl_$dacpId"
-        if (nextName == serviceName && remote == activeRemote) {
+        val nextRemote = remote.trim()
+        if (nextName == serviceName) {
+            // Active-Remote can rotate on a song change while the DACP service
+            // endpoint remains the same. Preserve the resolved socket instead of
+            // restarting Android NSD during the most fragile part of playback.
+            if (nextRemote.isNotBlank()) activeRemote = nextRemote
             if (nextName.isNotBlank() && host.isBlank()) discover()
             return
         }
-        activeRemote = remote.trim()
+        activeRemote = nextRemote
         serviceName = nextName
         host = ""
         port = 0

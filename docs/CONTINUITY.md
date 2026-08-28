@@ -1,5 +1,48 @@
 # Continuidade do projeto
 
+## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.10
+
+Resultado real da 1.8.9:
+
+- hotspot corrigido e exibido como `Citroen C3`;
+- mapa/visual da 1.8.8 aceitos e novamente congelados;
+- áudio ainda interrompe, sobretudo com Waze aberto e com o iPhone no suporte
+  imediatamente acima do rádio Bluetooth;
+- o cronômetro congela junto do som e depois avança, indicando falta de pacotes
+  ou interrupção/reabertura da sessão, não apenas falha visual;
+- trocar a faixa pela Central de Controle do iPhone ainda pode encerrar o app.
+
+Diagnóstico da 1.8.9:
+
+1. O suporte coloca o transmissor Wi-Fi 2,4 GHz do iPhone muito perto do
+   receptor Bluetooth 2,4 GHz do rádio. Software pode absorver rajadas curtas,
+   mas não elimina saturação física contínua; o teste final também deve ser
+   repetido com o telefone afastado do rádio.
+2. A 1.8.9 registrava simultaneamente `MediaSession` e
+   `RemoteControlClient`. No Android 5 isso publica dois players AVRCP
+   concorrentes e o caminho antigo é acionado exatamente nas mudanças de faixa.
+3. `RadioMediaSession` carregava `TrackInfo` (incluindo Bitmap) até a thread
+   do rádio e republicava metadados no Bluetooth. A 1.8.10 envia somente estado
+   primitivo de transporte; título/capa continuam no painel.
+4. Se o `Active-Remote` mudava mantendo o mesmo DACP ID, o endpoint resolvido
+   era descartado e o Android NSD reiniciado durante a troca de faixa. A 1.8.10
+   preserva o endpoint e apenas troca o token válido.
+5. Com navegação ativa, capas novas deixam de ser decodificadas. Isso evita pico
+   de bitmap junto ao cache de tiles sem alterar mapa, rota ou aparência.
+6. A margem AirPlay passa de 600 ms para 1000 ms. Os 8192 frames de saída A2DP
+   são preservados.
+
+Critérios obrigatórios da 1.8.10:
+
+- nenhuma classe de mapa/rota/tile/DashboardView pode diferir da 1.8.8 aceita;
+- nenhum `RemoteControlClient` ou `MediaMetadata` pode existir no caminho do
+  rádio;
+- `MEDIA_BUTTON`, próxima/anterior e DACP continuam presentes;
+- hotspot continua literalmente `Citroen C3`;
+- recursos, assets e bibliotecas nativas permanecem idênticos;
+- APK precisa compilar, reconstruir, instalar sobre a 1.8.9 e usar o mesmo
+  certificado.
+
 ## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.9
 
 Base obrigatória: APK 1.8.8. O mapa novo foi aceito visualmente e fica
