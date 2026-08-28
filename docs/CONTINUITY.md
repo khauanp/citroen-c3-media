@@ -77,6 +77,10 @@ Checkpoint de implementação:
 - Android CI #28 passou pela comparação canônica do mapa e parou na busca do
   método de descarte de capa porque o verificador usava a assinatura smali
   abreviada. A assinatura completa foi corrigida; o código do app não mudou.
+- Android CI #29 compilou e montou o APK, mas o verificador procurava os nomes
+  Kotlin `KEYCODE_MEDIA_NEXT/PREVIOUS`. Eles são constantes inline e viram
+  números no bytecode. A prova passou a exigir as chamadas finais reais
+  `AirPlayService.nextTrack/previousTrack`, sem alterar o aplicativo.
 - O nome `null` do hotspot foi rastreado no bytecode: `SSID = SSID` dentro do
   bloco de `WifiConfiguration` lia o próprio campo ainda nulo. A origem agora
   usa `this.SSID = HotspotController.SSID`; o patch do APK grava diretamente
