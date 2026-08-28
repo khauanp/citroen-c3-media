@@ -66,6 +66,10 @@ Checkpoint de implementação:
 - Android CI #26 chegou ao compilador e apontou apenas a sobrecarga histórica
   `RadioMediaSession.update(track, playing, position)`. Ela foi restaurada
   sobre a mesma fila assíncrona; nenhum arquivo do mapa foi alterado.
+- Android CI #27 compilou os auxiliares e montou o APK 1.8.9. A prova do mapa
+  comparou smali pré-build com smali redecodificado e detectou a normalização
+  do apktool em `C3LinkPolyline`, não uma alteração funcional. O workflow agora
+  monta e redecodifica também a referência 1.8.8 antes da comparação exata.
 
 Atualizado em: 18 de agosto de 2026 — versão 1.2.0
 
