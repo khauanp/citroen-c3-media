@@ -63,6 +63,9 @@ Checkpoint de implementação:
 - O Gradle local não conseguiu resolver o Android Gradle Plugin 8.9.2 por
   restrição de rede/cache. O próximo passo obrigatório é compilar no GitHub,
   corrigir qualquer erro Kotlin e só então montar/assinar o APK.
+- Android CI #26 chegou ao compilador e apontou apenas a sobrecarga histórica
+  `RadioMediaSession.update(track, playing, position)`. Ela foi restaurada
+  sobre a mesma fila assíncrona; nenhum arquivo do mapa foi alterado.
 
 Atualizado em: 18 de agosto de 2026 — versão 1.2.0
 

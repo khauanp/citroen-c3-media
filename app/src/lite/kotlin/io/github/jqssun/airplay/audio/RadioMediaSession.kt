@@ -37,7 +37,7 @@ class RadioMediaSession(private val service: AirPlayService) {
     private val remoteControlClient = RemoteControlClient(mediaButtonIntent)
     private var lastTrack = TrackInfo()
     private var lastPlaying = false
-    @Volatile private var pendingState: MediaState? = null
+    @Volatile private var pendingUpdate: PublishedState? = null
     private val updateQueued = AtomicBoolean(false)
     private val released = AtomicBoolean(false)
 
@@ -72,17 +72,19 @@ class RadioMediaSession(private val service: AirPlayService) {
         applyUpdate(TrackInfo(), false, 0L)
     }
 
-    fun update(state: MediaState) {
+    fun update(state: MediaState) = update(state.track, state.playing, state.positionMs)
+
+    fun update(track: TrackInfo, playing: Boolean, positionMs: Long) {
         if (released.get()) return
-        pendingState = state
+        pendingUpdate = PublishedState(track, playing, positionMs)
         if (!updateQueued.compareAndSet(false, true)) return
         handler.post {
             do {
-                val current = pendingState
-                pendingState = null
+                val current = pendingUpdate
+                pendingUpdate = null
                 if (current != null) applyUpdate(current.track, current.playing, current.positionMs)
                 updateQueued.set(false)
-            } while (pendingState != null && updateQueued.compareAndSet(false, true))
+            } while (pendingUpdate != null && updateQueued.compareAndSet(false, true))
         }
     }
 
@@ -154,4 +156,10 @@ class RadioMediaSession(private val service: AirPlayService) {
         }
         worker.quitSafely()
     }
+
+    private data class PublishedState(
+        val track: TrackInfo,
+        val playing: Boolean,
+        val positionMs: Long,
+    )
 }
