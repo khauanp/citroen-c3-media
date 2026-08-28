@@ -8,6 +8,7 @@ import android.util.Log
 import java.net.Inet4Address
 import java.net.NetworkInterface
 import java.io.File
+import kotlin.math.abs
 
 /**
  * Android 5 still exposes hotspot control through the vendor WifiManager implementation.
@@ -25,6 +26,7 @@ class HotspotController(context: Context) {
         }
         val wifiWasEnabled = wifi.isWifiEnabled
         return try {
+            val channel = chooseLeastCongestedChannel()
             val config = WifiConfiguration().apply {
                 // Qualify the companion constant: an unqualified `SSID = SSID`
                 // resolves both sides to WifiConfiguration.SSID and preserves null.
@@ -39,6 +41,7 @@ class HotspotController(context: Context) {
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.CCMP)
                 allowedGroupCiphers.set(WifiConfiguration.GroupCipher.TKIP)
             }
+            applyK00eRadioProfile(config, channel)
             val method = wifi.javaClass.getMethod(
                 "setWifiApEnabled",
                 WifiConfiguration::class.java,
@@ -47,7 +50,10 @@ class HotspotController(context: Context) {
             if (wifiWasEnabled) wifi.isWifiEnabled = false
             val accepted = method.invoke(wifi, config, true) as? Boolean ?: false
             if (!accepted && wifiWasEnabled) wifi.isWifiEnabled = true
-            Result(accepted, if (accepted) "Ativando rede $SSID…" else "Ative o ponto de acesso do tablet")
+            Result(
+                accepted,
+                if (accepted) "Ativando rede $SSID no canal $channel…" else "Ative o ponto de acesso do tablet",
+            )
         } catch (error: Exception) {
             if (wifiWasEnabled) {
                 try { wifi.isWifiEnabled = true } catch (_: Exception) {}
@@ -55,6 +61,80 @@ class HotspotController(context: Context) {
             Log.w(TAG, "Hotspot control unavailable", error)
             Result(false, "Ative o ponto de acesso ou use a mesma rede Wi-Fi")
         }
+    }
+
+    /**
+     * K00E/ME372CG is a 2.4 GHz 802.11b/g/n device. Its Android 5 vendor API
+     * exposes hotspot band/channel only as hidden WifiConfiguration fields.
+     * Failure is deliberately non-fatal: the ASUS firmware then keeps its
+     * automatic channel selection instead of preventing the hotspot startup.
+     */
+    private fun applyK00eRadioProfile(config: WifiConfiguration, channel: Int) {
+        val bandApplied = setHiddenInt(config, "apBand", AP_BAND_2GHZ)
+        val channelApplied = setHiddenInt(config, "apChannel", channel)
+        Log.i(
+            TAG,
+            "K00E coexistence profile: 2.4 GHz channel=$channel " +
+                "bandApplied=$bandApplied channelApplied=$channelApplied",
+        )
+    }
+
+    private fun setHiddenInt(target: WifiConfiguration, name: String, value: Int): Boolean {
+        return try {
+            val field = try {
+                WifiConfiguration::class.java.getField(name)
+            } catch (_: NoSuchFieldException) {
+                WifiConfiguration::class.java.getDeclaredField(name).apply { isAccessible = true }
+            }
+            field.setInt(target, value)
+            true
+        } catch (error: Exception) {
+            Log.w(TAG, "ASUS hotspot field unavailable: $name", error)
+            false
+        }
+    }
+
+    /**
+     * Uses the last scan already held by Android; it never starts another scan
+     * while audio is active. Only non-overlapping 20 MHz planning channels are
+     * considered. Edge channels win ties so Bluetooth AFH retains a larger
+     * contiguous part of the 2.4 GHz band.
+     */
+    private fun chooseLeastCongestedChannel(): Int {
+        val candidates = intArrayOf(1, 11, 6)
+        val scores = IntArray(candidates.size)
+        val nearby = try {
+            wifi.scanResults.orEmpty()
+        } catch (error: Exception) {
+            Log.w(TAG, "Wi-Fi environment scan unavailable; using channel 1", error)
+            emptyList()
+        }
+        for (network in nearby) {
+            val networkChannel = frequencyTo2GhzChannel(network.frequency) ?: continue
+            val strength = when {
+                network.level >= -50 -> 64
+                network.level >= -60 -> 32
+                network.level >= -70 -> 16
+                network.level >= -80 -> 8
+                else -> 2
+            }
+            for (index in candidates.indices) {
+                val overlap = (5 - abs(candidates[index] - networkChannel)).coerceAtLeast(0)
+                scores[index] += strength * overlap
+            }
+        }
+        var best = 0
+        for (index in 1 until candidates.size) {
+            if (scores[index] < scores[best]) best = index
+        }
+        Log.i(TAG, "2.4 GHz channel scores: 1=${scores[0]} 11=${scores[1]} 6=${scores[2]}")
+        return candidates[best]
+    }
+
+    private fun frequencyTo2GhzChannel(frequencyMhz: Int): Int? {
+        if (frequencyMhz == 2484) return 14
+        if (frequencyMhz !in 2412..2472) return null
+        return (frequencyMhz - 2407) / 5
     }
 
     fun isActive(): Boolean {
@@ -124,6 +204,7 @@ class HotspotController(context: Context) {
         private const val DEFAULT_IPHONE_ADDRESS = "192.168.43.2"
         private const val WIFI_AP_STATE_ENABLING = 12
         private const val WIFI_AP_STATE_ENABLED = 13
+        private const val AP_BAND_2GHZ = 0
         private const val TAG = "C3MediaHotspot"
     }
 }
