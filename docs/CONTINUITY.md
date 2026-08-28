@@ -1,5 +1,69 @@
 # Continuidade do projeto
 
+## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.9
+
+Base obrigatória: APK 1.8.8. O mapa novo foi aceito visualmente e fica
+congelado: nenhum código, recurso, configuração ou transporte do mapa pode ser
+alterado na manutenção 1.8.9.
+
+Falhas confirmadas no K00E real:
+
+1. O áudio ainda engasga usando somente música e piora quando o Waze concorre
+   no iPhone. A intensidade muda conforme posição/local e proximidade do rádio,
+   compatível com contenção entre Wi-Fi 2,4 GHz (AirPlay) e Bluetooth A2DP.
+2. Durante o engasgo, o cronômetro da música também congela e depois salta
+   alguns segundos. Isso prova que não é apenas um erro visual do contador;
+   existe bloqueio/atraso de processamento ou interrupção do fluxo recebido.
+3. Ao trocar de faixa manualmente ou no fim automático da música, sobretudo com
+   Waze aberto, o aplicativo do tablet fecha. A troca de metadados/capa e a
+   desmontagem/reabertura do áudio precisam ser tratadas como operações
+   concorrentes e não podem destruir a sessão ativa.
+4. Os botões físico/AVRCP de próxima e anterior do rádio continuam sem efeito.
+   A MediaSession da 1.8.8 não é suficiente no Android 5: falta registrar um
+   MediaButtonReceiver explícito e confirmar a entrega DACP ao iPhone.
+
+Escopo autorizado para 1.8.9:
+
+- estabilizar recepção/saída de áudio e espelhamento sob contenção de rádio;
+- impedir corrida/falha fatal durante troca de faixa e mudança de metadados;
+- capturar NEXT/PREVIOUS/PLAY_PAUSE do rádio no Android 5 e encaminhar por DACP;
+- preservar interface/player real da 1.8.1;
+- preservar byte a byte o mapa da 1.8.8;
+- manter chave de assinatura fora do GitHub e o PR em rascunho até teste físico.
+
+Critérios de validação antes da entrega:
+
+- verificador recusa qualquer diferença nos arquivos do mapa entre 1.8.8 e
+  1.8.9;
+- teste automatizado de rajadas de troca de faixa não fecha o serviço;
+- descarte tardio de capa nunca recicla bitmap que ainda possa ser desenhado;
+- áudio usa margem real tanto na entrada AirPlay quanto na saída A2DP;
+- media buttons são recebidos mesmo no caminho legado do Android 5;
+- APK instala sobre 1.8.8 com o mesmo certificado.
+
+Checkpoint de implementação:
+
+- `AudioRenderer` passou de 220 ms/saída automática para 600 ms de margem
+  AirPlay e 8192 frames na saída A2DP. A latência extra é deliberada para
+  absorver rajadas e coexistência Wi-Fi/Bluetooth no hardware antigo.
+- `RadioMediaSession` saiu da thread principal: metadados/estado são
+  consolidados numa `HandlerThread`, com exceções do framework isoladas.
+- Foi acrescentado o caminho legado que o rádio antigo espera:
+  `MEDIA_BUTTON` + `registerMediaButtonEventReceiver` +
+  `RemoteControlClient`, mantendo também a `MediaSession` moderna.
+- `DacpController.update` não apaga mais um endpoint já resolvido quando o
+  iPhone repete as mesmas credenciais na troca de faixa; até quatro comandos
+  ficam em fila enquanto o endereço DACP é descoberto.
+- A capa anterior não é mais reciclada explicitamente após um segundo. O GC a
+  libera apenas quando nenhum snapshot do Canvas a referencia, evitando a
+  falha fatal `Canvas: trying to use a recycled bitmap` no Android 5.
+- `apply_android_1_8_9_media.py` sempre reproduz primeiro a 1.8.8 e altera
+  somente mídia/manifesto/versão. `verify_android_1_8_9_media.py` falha se
+  qualquer classe do mapa divergir um byte da 1.8.8.
+- O Gradle local não conseguiu resolver o Android Gradle Plugin 8.9.2 por
+  restrição de rede/cache. O próximo passo obrigatório é compilar no GitHub,
+  corrigir qualquer erro Kotlin e só então montar/assinar o APK.
+
 Atualizado em: 18 de agosto de 2026 — versão 1.2.0
 
 ## Objetivo fechado

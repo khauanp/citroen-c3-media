@@ -6,8 +6,9 @@ import android.net.nsd.NsdServiceInfo
 import android.util.Log
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.ArrayDeque
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Sends the play/pause/previous/next commands back to the iPhone. */
 class DacpController(context: Context) {
@@ -17,14 +18,21 @@ class DacpController(context: Context) {
     @Volatile private var serviceName = ""
     @Volatile private var host = ""
     @Volatile private var port = 0
-    @Volatile private var pendingPath = ""
+    private val pendingPaths = ArrayDeque<String>()
+    private val pendingLock = Any()
     private val resolving = AtomicBoolean(false)
     private val discovering = AtomicBoolean(false)
+    private val released = AtomicBoolean(false)
     private var discoveryListener: NsdManager.DiscoveryListener? = null
 
     fun update(dacpId: String, remote: String) {
-        activeRemote = remote
-        serviceName = if (dacpId.isBlank()) "" else "iTunes_Ctrl_$dacpId"
+        val nextName = if (dacpId.isBlank()) "" else "iTunes_Ctrl_$dacpId"
+        if (nextName == serviceName && remote == activeRemote) {
+            if (nextName.isNotBlank() && host.isBlank()) discover()
+            return
+        }
+        activeRemote = remote.trim()
+        serviceName = nextName
         host = ""
         port = 0
         if (serviceName.isBlank() || remote.isBlank()) {
@@ -35,7 +43,7 @@ class DacpController(context: Context) {
     }
 
     private fun discover() {
-        if (serviceName.isBlank() || !discovering.compareAndSet(false, true)) return
+        if (released.get() || serviceName.isBlank() || !discovering.compareAndSet(false, true)) return
         val listener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(serviceType: String) = Unit
 
@@ -89,9 +97,10 @@ class DacpController(context: Context) {
                     port = serviceInfo.port
                     resolving.set(false)
                     stopDiscovery()
-                    val queued = pendingPath
-                    pendingPath = ""
-                    if (queued.isNotBlank()) send(queued)
+                    val queued = synchronized(pendingLock) {
+                        ArrayList<String>(pendingPaths).also { pendingPaths.clear() }
+                    }
+                    queued.forEach(::send)
                 }
             })
         } catch (error: Exception) {
@@ -110,11 +119,12 @@ class DacpController(context: Context) {
         serviceName = ""
         host = ""
         port = 0
-        pendingPath = ""
+        synchronized(pendingLock) { pendingPaths.clear() }
         stopDiscovery()
     }
 
     fun release() {
+        released.set(true)
         reset()
         executor.shutdownNow()
     }
@@ -125,7 +135,10 @@ class DacpController(context: Context) {
         val remote = activeRemote
         if (remote.isBlank()) return
         if (endpointHost.isBlank() || endpointPort <= 0) {
-            pendingPath = path
+            synchronized(pendingLock) {
+                if (pendingPaths.lastOrNull() != path) pendingPaths.addLast(path)
+                while (pendingPaths.size > MAX_PENDING_COMMANDS) pendingPaths.removeFirst()
+            }
             discover()
             return
         }
@@ -144,7 +157,10 @@ class DacpController(context: Context) {
                 } catch (error: Exception) {
                     host = ""
                     port = 0
-                    pendingPath = path
+                    synchronized(pendingLock) {
+                        if (pendingPaths.lastOrNull() != path) pendingPaths.addLast(path)
+                        while (pendingPaths.size > MAX_PENDING_COMMANDS) pendingPaths.removeFirst()
+                    }
                     discover()
                     Log.w(TAG, "DACP command failed: $path", error)
                 } finally {
@@ -168,5 +184,6 @@ class DacpController(context: Context) {
     companion object {
         private const val TAG = "C3MediaDacp"
         private const val DACP_TYPE = "_dacp._tcp."
+        private const val MAX_PENDING_COMMANDS = 4
     }
 }

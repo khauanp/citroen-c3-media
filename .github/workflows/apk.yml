@@ -1,4 +1,4 @@
-name: Build K00E 1.8.8 stability APK
+name: Build K00E 1.8.9 media stability APK
 
 on:
   push:
@@ -10,8 +10,11 @@ on:
       - "tools/apply_android_1_8_8_stability.py"
       - "tools/verify_android_1_8_8_stability.py"
       - "tools/android_1_8_8/**"
+      - "tools/apply_android_1_8_9_media.py"
+      - "tools/verify_android_1_8_9_media.py"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/DacpController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioMediaSession.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioButtonReceiver.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt"
       - ".github/workflows/apk.yml"
   pull_request:
@@ -22,8 +25,11 @@ on:
       - "tools/apply_android_1_8_8_stability.py"
       - "tools/verify_android_1_8_8_stability.py"
       - "tools/android_1_8_8/**"
+      - "tools/apply_android_1_8_9_media.py"
+      - "tools/verify_android_1_8_9_media.py"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/DacpController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioMediaSession.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioButtonReceiver.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt"
       - ".github/workflows/apk.yml"
   workflow_dispatch:
@@ -72,8 +78,8 @@ jobs:
           test -d "$classes_dir"
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           test -x "$build_tools/d8"
-          mapfile -t helper_classes < <(find "$classes_dir/io/github/jqssun/airplay/audio" -maxdepth 1 -type f \( -name 'DacpController*.class' -o -name 'RadioMediaSession*.class' \) | sort)
-          test "${#helper_classes[@]}" -gt 2
+          mapfile -t helper_classes < <(find "$classes_dir/io/github/jqssun/airplay/audio" -maxdepth 1 -type f \( -name 'DacpController*.class' -o -name 'RadioMediaSession*.class' -o -name 'RadioButtonReceiver*.class' \) | sort)
+          test "${#helper_classes[@]}" -gt 3
           mkdir -p build/helper-dex
           "$build_tools/d8" \
             --min-api 21 \
@@ -86,32 +92,34 @@ jobs:
           (cd build/helper-dex && zip -q ../helper.apk classes.dex)
           java -jar build/apktool.jar d -f -r -o build/helper-decoded build/helper.apk
 
-      - name: Apply map, route, radio, audio, and mirroring maintenance
+      - name: Apply media-only maintenance over the exact 1.8.8 map
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
           java -jar build/apktool.jar d -f \
             -o build/original \
             build/base/C3-Media-1.8.1-K00E.apk
+          cp -a build/original build/reference-188
+          python3 tools/apply_android_1_8_8_stability.py build/reference-188 build/helper-decoded
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_8_stability.py build/patched build/helper-decoded
+          python3 tools/apply_android_1_8_9_media.py build/patched build/helper-decoded
           java -jar build/apktool.jar b \
             build/patched \
-            -o build/C3-Media-1.8.8-K00E-unsigned.apk
+            -o build/C3-Media-1.8.9-K00E-unsigned.apk
 
-      - name: Prove UI, player and native library are unchanged
+      - name: Prove the 1.8.8 map and native receiver are unchanged
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
           java -jar build/apktool.jar d -f \
             -o build/rebuilt \
-            build/C3-Media-1.8.8-K00E-unsigned.apk
-          python3 tools/verify_android_1_8_8_stability.py build/original build/rebuilt
-          unzip -t build/C3-Media-1.8.8-K00E-unsigned.apk
+            build/C3-Media-1.8.9-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_9_media.py build/reference-188 build/rebuilt
+          unzip -t build/C3-Media-1.8.9-K00E-unsigned.apk
 
       - name: Upload unsigned maintenance APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.8-K00E-unsigned
-          path: build/C3-Media-1.8.8-K00E-unsigned.apk
+          name: C3-Media-1.8.9-K00E-unsigned
+          path: build/C3-Media-1.8.9-K00E-unsigned.apk
           if-no-files-found: error
