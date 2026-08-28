@@ -59,7 +59,7 @@ def main() -> int:
     service = new[SERVICE]
     no_recycle = method(
         service,
-        b"private static final queueCoverArt$lambda$31$lambda$30$lambda$29",
+        b"private static final queueCoverArt$lambda$31$lambda$30$lambda$29(Lio/github/jqssun/airplay/service/AirPlayService;Landroid/graphics/Bitmap;)V",
     )
     if b"Bitmap;->recycle()V" in no_recycle or b"return-void" not in no_recycle:
         raise RuntimeError("old cover-art bitmap can still be recycled while Canvas uses it")

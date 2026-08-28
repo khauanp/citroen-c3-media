@@ -70,6 +70,9 @@ Checkpoint de implementação:
   comparou smali pré-build com smali redecodificado e detectou a normalização
   do apktool em `C3LinkPolyline`, não uma alteração funcional. O workflow agora
   monta e redecodifica também a referência 1.8.8 antes da comparação exata.
+- Android CI #28 passou pela comparação canônica do mapa e parou na busca do
+  método de descarte de capa porque o verificador usava a assinatura smali
+  abreviada. A assinatura completa foi corrigida; o código do app não mudou.
 
 Atualizado em: 18 de agosto de 2026 — versão 1.2.0
 
