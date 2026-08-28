@@ -76,7 +76,11 @@ def main() -> int:
     ):
         if marker not in hotspot:
             raise RuntimeError(f"K00E channel policy marker missing: {marker!r}")
-    if b'"apChannel"' not in method(new[HOTSPOT], b"applyK00eRadioProfile"):
+    profile = method(
+        new[HOTSPOT],
+        b"private final applyK00eRadioProfile(Landroid/net/wifi/WifiConfiguration;I)V",
+    )
+    if b'"apChannel"' not in profile:
         raise RuntimeError("selected channel is not applied to WifiConfiguration")
 
     cover = method(new[SERVICE], b"public onCoverArt([B)V")
