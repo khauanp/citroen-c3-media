@@ -12,6 +12,7 @@ from verify_android_1_8_8_stability import all_smali
 
 SERVICE = Path("io/github/jqssun/airplay/service/AirPlayService.smali")
 AUDIO = Path("io/github/jqssun/airplay/renderer/AudioRenderer.smali")
+HOTSPOT = Path("io/github/jqssun/airplay/connectivity/HotspotController.smali")
 MAP_PREFIXES = (
     "io/github/jqssun/airplay/connectivity/C3Link",
     "io/github/jqssun/airplay/connectivity/C3Map",
@@ -46,7 +47,7 @@ def main() -> int:
     changed = {path for path in old.keys() & new.keys() if old[path] != new[path]}
     added = set(new) - set(old)
     deleted = set(old) - set(new)
-    if changed - {SERVICE, AUDIO} - {path for path in changed if is_radio(path)}:
+    if changed - {SERVICE, AUDIO, HOTSPOT} - {path for path in changed if is_radio(path)}:
         raise RuntimeError(f"unexpected changed classes: {sorted(changed)}")
     if added - {path for path in added if is_radio(path)} or deleted:
         raise RuntimeError(f"unexpected class scope: {sorted(added)=} {sorted(deleted)=}")
@@ -63,6 +64,19 @@ def main() -> int:
     )
     if b"Bitmap;->recycle()V" in no_recycle or b"return-void" not in no_recycle:
         raise RuntimeError("old cover-art bitmap can still be recycled while Canvas uses it")
+
+    hotspot = new[HOTSPOT]
+    if b'.field public static final SSID:Ljava/lang/String; = "Citroen C3"' not in hotspot:
+        raise RuntimeError("hotspot constant is not Citroen C3")
+    hotspot_start = method(hotspot, b"public final declared-synchronized ensureStarted()Lio/github/jqssun/airplay/connectivity/HotspotController$Result;")
+    expected_ssid_assignment = (
+        b'const-string v4, "Citroen C3"\n\n'
+        b'    iput-object v4, v2, Landroid/net/wifi/WifiConfiguration;->SSID:Ljava/lang/String;'
+    )
+    if expected_ssid_assignment not in hotspot_start:
+        raise RuntimeError("WifiConfiguration.SSID is not assigned the non-null Citroen C3 value")
+    if b'iget-object v4, v2, Landroid/net/wifi/WifiConfiguration;->SSID:Ljava/lang/String;' in hotspot_start:
+        raise RuntimeError("null-preserving hotspot SSID self-assignment remains")
 
     radio = b"\n".join(data for path, data in new.items() if is_radio(path))
     for marker in (
@@ -94,7 +108,7 @@ def main() -> int:
     if "versionCode: 10809" not in config or "versionName: 1.8.9" not in config:
         raise RuntimeError("rebuilt APK does not report 1.8.9")
 
-    print("verified: 1.8.8 map frozen; A2DP buffered; cover swap safe; Android-5 radio controls active")
+    print("verified: 1.8.8 map frozen; media stable; Android-5 radio active; hotspot SSID is Citroen C3")
     return 0
 
 

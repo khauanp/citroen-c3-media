@@ -26,7 +26,9 @@ class HotspotController(context: Context) {
         val wifiWasEnabled = wifi.isWifiEnabled
         return try {
             val config = WifiConfiguration().apply {
-                SSID = SSID
+                // Qualify the companion constant: an unqualified `SSID = SSID`
+                // resolves both sides to WifiConfiguration.SSID and preserves null.
+                this.SSID = HotspotController.SSID
                 preSharedKey = PASSWORD
                 allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN)
                 allowedProtocols.set(WifiConfiguration.Protocol.RSN)
@@ -115,7 +117,7 @@ class HotspotController(context: Context) {
     }
 
     companion object {
-        const val SSID = "Citroen-C3"
+        const val SSID = "Citroen C3"
         const val PASSWORD = "C3Media26"
         const val SUBNET_MASK = "255.255.255.0"
         private const val DEFAULT_ADDRESS = "192.168.43.1"

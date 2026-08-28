@@ -21,6 +21,9 @@ Falhas confirmadas no K00E real:
 4. Os botões físico/AVRCP de próxima e anterior do rádio continuam sem efeito.
    A MediaSession da 1.8.8 não é suficiente no Android 5: falta registrar um
    MediaButtonReceiver explícito e confirmar a entrega DACP ao iPhone.
+5. O ponto de acesso criado pelo tablet aparece como `null`. O APK real fazia
+   uma autoatribuição de `WifiConfiguration.SSID`, preservando o valor nulo em
+   vez de copiar a constante. A rede deve se chamar exatamente `Citroen C3`.
 
 Escopo autorizado para 1.8.9:
 
@@ -39,6 +42,7 @@ Critérios de validação antes da entrega:
 - descarte tardio de capa nunca recicla bitmap que ainda possa ser desenhado;
 - áudio usa margem real tanto na entrada AirPlay quanto na saída A2DP;
 - media buttons são recebidos mesmo no caminho legado do Android 5;
+- `WifiConfiguration.SSID` recebe literalmente `Citroen C3`, sem autoatribuição;
 - APK instala sobre 1.8.8 com o mesmo certificado.
 
 Checkpoint de implementação:
@@ -73,6 +77,11 @@ Checkpoint de implementação:
 - Android CI #28 passou pela comparação canônica do mapa e parou na busca do
   método de descarte de capa porque o verificador usava a assinatura smali
   abreviada. A assinatura completa foi corrigida; o código do app não mudou.
+- O nome `null` do hotspot foi rastreado no bytecode: `SSID = SSID` dentro do
+  bloco de `WifiConfiguration` lia o próprio campo ainda nulo. A origem agora
+  usa `this.SSID = HotspotController.SSID`; o patch do APK grava diretamente
+  `Citroen C3`. É necessário reiniciar o tablet uma vez após instalar para o
+  Android 5 encerrar o ponto antigo e criar a nova rede.
 
 Atualizado em: 18 de agosto de 2026 — versão 1.2.0
 
@@ -121,7 +130,7 @@ O Android 5 não executa o YouTube Music atual, e o K00E não pode funcionar com
 - `VideoRenderer` + `VideoPipeline`: H.264 com `MediaCodec` e EGL/OpenGL ES 2.
 - `DmapParser` e `TrackInfo`: metadados e capa.
 - `DacpController`: anterior, play/pause e próxima.
-- `HotspotController`: tentativa de ativar `Citroen-C3`, fallback manual e detecção leve de cliente pela tabela ARP.
+- `HotspotController`: cria a rede `Citroen C3`, fallback manual e detecção leve de cliente pela tabela ARP.
 - `EnergyController`/`EnergyPolicy`: espera após 45 s, monitor de bateria/temperatura/memória e proteção térmica a 43 °C.
 - `DashboardView`: splash, espera, home, música, conexão, erro, PIN e painel modular Waze + mídia.
 - `C3MediaApplication`: registro da última falha Java e relançamento do painel.
@@ -142,7 +151,7 @@ O Android 5 não executa o YouTube Music atual, e o K00E não pode funcionar com
 
 O teste real confirmou instalação, inicialização, descoberta AirPlay e espelhamento, e revelou cinco ajustes:
 
-1. A rede local sem internet assumia a rota padrão do iPhone. O procedimento agora usa IP manual sem gateway na rede `Citroen-C3`, preservando o 4G/5G para Waze e streaming.
+1. A rede local sem internet assumia a rota padrão do iPhone. O procedimento agora usa IP manual sem gateway na rede `Citroen C3`, preservando o 4G/5G para Waze e streaming.
 2. A interface ganhou áreas de toque maiores, resposta tátil, cartões de ajuda e controles completos sobre o mapa. O toque sobre o conteúdo do Waze continua impossível por limitação do AirPlay, não do digitalizador do K00E.
 3. Metadados/progresso do YouTube Music não alteram mais `MIRROR` para `AUDIO`. Capas usam RGB_565, limite de 384 px e proteção contra falta de memória.
 4. Fontes pequenas receberam escala de legibilidade automotiva entre 12% e 20%.

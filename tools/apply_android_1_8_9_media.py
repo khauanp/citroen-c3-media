@@ -14,6 +14,7 @@ from apply_android_1_8_8_stability import main as apply_1_8_8
 SERVICE = Path("smali/io/github/jqssun/airplay/service/AirPlayService.smali")
 AUDIO = Path("smali/io/github/jqssun/airplay/renderer/AudioRenderer.smali")
 MANIFEST = Path("AndroidManifest.xml")
+HOTSPOT = Path("smali/io/github/jqssun/airplay/connectivity/HotspotController.smali")
 
 
 def replace_method(value: str, signature: str, body: str) -> str:
@@ -90,6 +91,23 @@ def patch_manifest(root: Path) -> None:
     path.write_text(value, encoding="utf-8")
 
 
+def patch_hotspot_name(root: Path) -> None:
+    path = root / HOTSPOT
+    value = path.read_text(encoding="utf-8")
+    value = replace_once(
+        value,
+        '    iget-object v4, v2, Landroid/net/wifi/WifiConfiguration;->SSID:Ljava/lang/String;\n\n'
+        '    iput-object v4, v2, Landroid/net/wifi/WifiConfiguration;->SSID:Ljava/lang/String;',
+        '    const-string v4, "Citroen C3"\n\n'
+        '    iput-object v4, v2, Landroid/net/wifi/WifiConfiguration;->SSID:Ljava/lang/String;',
+        "non-null hotspot SSID",
+    )
+    value = value.replace('"Citroen-C3"', '"Citroen C3"')
+    if '"Citroen-C3"' in value:
+        raise RuntimeError("old hotspot name remains in HotspotController")
+    path.write_text(value, encoding="utf-8")
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         raise SystemExit("usage: apply_android_1_8_9_media.py APKTOOL_DIRECTORY HELPER_DECODE")
@@ -107,6 +125,7 @@ def main() -> int:
     patch_audio(root)
     patch_service_safety(root)
     patch_manifest(root)
+    patch_hotspot_name(root)
 
     config_file = root / "apktool.yml"
     config = config_file.read_text(encoding="utf-8")

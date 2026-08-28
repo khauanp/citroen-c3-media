@@ -15,6 +15,7 @@ on:
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/DacpController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioMediaSession.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioButtonReceiver.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/connectivity/HotspotController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt"
       - ".github/workflows/apk.yml"
   pull_request:
@@ -30,6 +31,7 @@ on:
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/DacpController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioMediaSession.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioButtonReceiver.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/connectivity/HotspotController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt"
       - ".github/workflows/apk.yml"
   workflow_dispatch:
