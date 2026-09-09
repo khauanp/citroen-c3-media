@@ -35,4 +35,24 @@ class EnergyPolicyTest {
             EnergyPolicy.selectMode(true, 0L, EnergyPolicy.THERMAL_LIMIT_C),
         )
     }
+
+    @Test
+    fun `does not enter protection below forty five`() {
+        assertEquals(
+            EnergyMode.ACTIVE,
+            EnergyPolicy.selectMode(true, 0L, 44.9f),
+        )
+    }
+
+    @Test
+    fun `thermal protection recovers only below forty one`() {
+        assertEquals(
+            EnergyMode.THERMAL_PROTECTION,
+            EnergyPolicy.selectMode(true, 0L, 41f, EnergyMode.THERMAL_PROTECTION),
+        )
+        assertEquals(
+            EnergyMode.ACTIVE,
+            EnergyPolicy.selectMode(true, 0L, 40.9f, EnergyMode.THERMAL_PROTECTION),
+        )
+    }
 }
