@@ -51,6 +51,26 @@ Pad. Como a telemetria disponível mede a bateria e o aparelho pode estar
 carregando dentro do painel, 45 °C foi escolhido como aumento máximo prudente;
 não será usado 46 °C ou mais nesta revisão.
 
+Resultado de build e empacotamento:
+
+- GitHub Actions `Build K00E 1.8.11 stable daylight APK` execução 41: sucesso;
+- testes Kotlin de fronteira 06/07 h, 18/19 h e histerese 45/41 °C: sucesso;
+- reconstrução canônica e comparação dos métodos de mapa/rota/tile: sucesso;
+- mídia, rede, recursos e bibliotecas idênticos à manutenção isolada 1.8.10;
+- APK final assinado com esquemas v1/v2/v3 e certificado SHA-256
+  `74:E3:33:A6:A3:74:FD:41:D5:C6:FA:84:92:D5:E6:5D:D6:A2:CC:CE:6D:32:0A:27:DB:32:F7:66:D8:1C:60:DF`;
+- APK final SHA-256
+  `164ae582607c10dd906352804fac5c4e83d38d5f2fbd690ee2ad532ef6902c1b`.
+
+Teste físico obrigatório antes de considerar o defeito encerrado:
+
+1. trocar dez faixas pela Central de Controle do iPhone;
+2. deixar duas faixas terminarem e avançarem automaticamente;
+3. repetir com o Waze aberto, uma notificação e uma ligação;
+4. girar o iPhone durante a reprodução;
+5. confirmar que o C3 Media permanece aberto e a saída auxiliar continua ativa;
+6. conferir modo claro entre 07:00–18:59 e modo escuro a partir de 19:00.
+
 ## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.10
 
 Resultado real da 1.8.9:
