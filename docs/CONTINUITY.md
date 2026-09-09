@@ -1,5 +1,56 @@
 # Continuidade do projeto
 
+## Checkpoint físico — 9 de setembro de 2026 — preparar 1.8.11
+
+Base funcional informada pelo usuário: 1.8.9. A manutenção será construída sobre
+a correção de mídia isolada da 1.8.10, ainda sem alterar o mapa aceito nem o
+hotspot `Citroen C3`.
+
+Falhas físicas a eliminar no caminho iPhone → tablet:
+
+1. o processo do tablet ainda pode encerrar entre o fim de uma faixa e o início
+   da próxima;
+2. também há encerramentos ao trocar música pela Central de Controle, ao receber
+   ligação/notificação e quando o iPhone muda de orientação;
+3. o usuário agora usa cabo auxiliar tablet → rádio. Portanto, esta revisão não
+   deve alterar Bluetooth/A2DP do carro nem atribuir o defeito restante a ele;
+4. a sessão AirPlay precisa sobreviver a pausa, retomada, troca de metadados e
+   reconfiguração do emissor sem destruir o serviço.
+
+Correção de mídia já isolada na 1.8.10 e incorporada nesta revisão:
+
+- apenas uma `MediaSession` no Android 5; o `RemoteControlClient` concorrente foi
+  removido;
+- nenhuma capa ou `TrackInfo` é publicada/referenciada pela sessão do rádio;
+- atualização de estado é serializada, reduzida a tipos primitivos e limitada;
+- mudança do token `Active-Remote` preserva o endpoint DACP já resolvido;
+- durante navegação, capa nova não é decodificada junto do cache de tiles;
+- margem de entrada AirPlay de 1 segundo, preservando a saída de 8192 frames.
+
+Novos requisitos autorizados para 1.8.11:
+
+- tema diurno automático entre 07:00 e 18:59, com paleta clara e brilho máximo;
+- tema noturno atual fora desse intervalo;
+- transição avaliada pelo relógio local do tablet, sem depender de internet;
+- proteção térmica elevada com cautela de 43 °C para 45 °C e recuperação em
+  41 °C, evitando oscilações perto do limite;
+- em espera, o brilho mínimo e o desenho de standby continuam inalterados.
+
+Escopo congelado e critérios de prova:
+
+- geometria, rota, recorte, rotação, transporte e cache do mapa devem ser
+  idênticos à versão aceita;
+- `Citroen C3`, bibliotecas nativas, recursos, assets e protocolo iPhone não
+  podem mudar;
+- a única mudança visual permitida é a troca automática da paleta já existente;
+- o build deve provar 07:00 inclusivo, 19:00 exclusivo, 45/41 °C e histerese;
+- o APK deve usar o mesmo certificado das versões 1.8.2–1.8.10.
+
+Observação térmica: a ASUS recomenda ambiente de até 35 °C para a família MeMO
+Pad. Como a telemetria disponível mede a bateria e o aparelho pode estar
+carregando dentro do painel, 45 °C foi escolhido como aumento máximo prudente;
+não será usado 46 °C ou mais nesta revisão.
+
 ## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.10
 
 Resultado real da 1.8.9:
