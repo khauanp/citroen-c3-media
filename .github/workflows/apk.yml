@@ -1,4 +1,4 @@
-name: Build K00E 1.8.11 radio coexistence APK
+name: Build K00E 1.8.11 stable daylight APK
 
 on:
   push:
@@ -14,13 +14,19 @@ on:
       - "tools/verify_android_1_8_9_media.py"
       - "tools/apply_android_1_8_10_media.py"
       - "tools/verify_android_1_8_10_media.py"
-      - "tools/apply_android_1_8_11_coexistence.py"
-      - "tools/verify_android_1_8_11_coexistence.py"
+      - "tools/apply_android_1_8_11_daylight.py"
+      - "tools/verify_android_1_8_11_daylight.py"
+      - "tools/android_1_8_11/**"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/DacpController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioMediaSession.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioButtonReceiver.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/connectivity/HotspotController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/ui/DayNightPolicy.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/power/EnergyPolicy.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/power/EnergyController.kt"
+      - "app/src/test/kotlin/io/github/jqssun/airplay/ui/DayNightPolicyTest.kt"
+      - "app/src/test/kotlin/io/github/jqssun/airplay/power/EnergyPolicyTest.kt"
       - ".github/workflows/apk.yml"
   pull_request:
     paths:
@@ -34,13 +40,19 @@ on:
       - "tools/verify_android_1_8_9_media.py"
       - "tools/apply_android_1_8_10_media.py"
       - "tools/verify_android_1_8_10_media.py"
-      - "tools/apply_android_1_8_11_coexistence.py"
-      - "tools/verify_android_1_8_11_coexistence.py"
+      - "tools/apply_android_1_8_11_daylight.py"
+      - "tools/verify_android_1_8_11_daylight.py"
+      - "tools/android_1_8_11/**"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/DacpController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioMediaSession.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/audio/RadioButtonReceiver.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/connectivity/HotspotController.kt"
       - "app/src/lite/kotlin/io/github/jqssun/airplay/service/AirPlayService.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/ui/DayNightPolicy.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/power/EnergyPolicy.kt"
+      - "app/src/lite/kotlin/io/github/jqssun/airplay/power/EnergyController.kt"
+      - "app/src/test/kotlin/io/github/jqssun/airplay/ui/DayNightPolicyTest.kt"
+      - "app/src/test/kotlin/io/github/jqssun/airplay/power/EnergyPolicyTest.kt"
       - ".github/workflows/apk.yml"
   workflow_dispatch:
 
@@ -80,16 +92,17 @@ jobs:
             -o build/apktool.jar
           printf '%s  %s\n' "$APKTOOL_SHA256" "build/apktool.jar" | sha256sum -c -
 
-      - name: Compile isolated Android 5 radio and hotspot helpers
+      - name: Test policies and compile isolated Android 5 helpers
         run: |
           chmod +x gradlew
+          ./gradlew :app:testReleaseUnitTest --stacktrace
           ./gradlew :app:compileReleaseKotlin --stacktrace
           classes_dir="app/build/tmp/kotlin-classes/release"
           test -d "$classes_dir"
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           test -x "$build_tools/d8"
-          mapfile -t helper_classes < <(find "$classes_dir/io/github/jqssun/airplay" -type f \( -name 'DacpController*.class' -o -name 'RadioMediaSession*.class' -o -name 'RadioButtonReceiver*.class' -o -name 'HotspotController*.class' \) | sort)
-          test "${#helper_classes[@]}" -gt 6
+          mapfile -t helper_classes < <(find "$classes_dir/io/github/jqssun/airplay/audio" -maxdepth 1 -type f \( -name 'DacpController*.class' -o -name 'RadioMediaSession*.class' -o -name 'RadioButtonReceiver*.class' \) | sort)
+          test "${#helper_classes[@]}" -gt 3
           mkdir -p build/helper-dex
           "$build_tools/d8" \
             --min-api 21 \
@@ -102,7 +115,7 @@ jobs:
           (cd build/helper-dex && zip -q ../helper.apk classes.dex)
           java -jar build/apktool.jar d -f -r -o build/helper-decoded build/helper.apk
 
-      - name: Apply isolated media maintenance over the exact 1.8.8 map
+      - name: Apply 1.8.11 over canonical 1.8.10
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -117,20 +130,28 @@ jobs:
           java -jar build/apktool.jar d -f \
             -o build/reference-188-rebuilt \
             build/C3-Media-1.8.8-reference-unsigned.apk
+          cp -a build/original build/reference-1810
+          python3 tools/apply_android_1_8_10_media.py build/reference-1810 build/helper-decoded
+          java -jar build/apktool.jar b \
+            build/reference-1810 \
+            -o build/C3-Media-1.8.10-reference-unsigned.apk
+          java -jar build/apktool.jar d -f \
+            -o build/reference-1810-rebuilt \
+            build/C3-Media-1.8.10-reference-unsigned.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_11_coexistence.py build/patched build/helper-decoded
+          python3 tools/apply_android_1_8_11_daylight.py build/patched build/helper-decoded
           java -jar build/apktool.jar b \
             build/patched \
             -o build/C3-Media-1.8.11-K00E-unsigned.apk
 
-      - name: Prove the 1.8.8 map and native receiver are unchanged
+      - name: Prove media and map are unchanged outside the requested scope
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
           java -jar build/apktool.jar d -f \
             -o build/rebuilt \
             build/C3-Media-1.8.11-K00E-unsigned.apk
-          python3 tools/verify_android_1_8_11_coexistence.py build/reference-188-rebuilt build/rebuilt
+          python3 tools/verify_android_1_8_11_daylight.py build/reference-1810-rebuilt build/rebuilt
           unzip -t build/C3-Media-1.8.11-K00E-unsigned.apk
 
       - name: Upload unsigned maintenance APK
