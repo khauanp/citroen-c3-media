@@ -59,7 +59,12 @@ class EnergyController(
         if (phonePresent) lastActivityAt = now
 
         val battery = readBattery()
-        val mode = EnergyPolicy.selectMode(phonePresent, now - lastActivityAt, battery.temperatureC)
+        val mode = EnergyPolicy.selectMode(
+            phonePresent,
+            now - lastActivityAt,
+            battery.temperatureC,
+            lastSnapshot.mode,
+        )
         val snapshot = EnergySnapshot(
             mode = mode,
             phonePresent = phonePresent,
