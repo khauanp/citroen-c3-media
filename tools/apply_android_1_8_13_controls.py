@@ -27,13 +27,13 @@ def patch_service(root: Path) -> None:
 
     iget-object v1, p0, Lio/github/jqssun/airplay/service/AirPlayService;->dacp:Lio/github/jqssun/airplay/audio/DacpController;
 
-    if-eqz v0, :cond_0
+    if-eqz v0, :c3_radio_play
 
     invoke-virtual {v1}, Lio/github/jqssun/airplay/audio/DacpController;->pause()V
 
     return-void
 
-    :cond_0
+    :c3_radio_play
     invoke-virtual {v1}, Lio/github/jqssun/airplay/audio/DacpController;->play()V
 
     return-void
