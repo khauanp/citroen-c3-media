@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.12 — em preparação
+
+- tolera o silêncio transitório entre faixas antes de publicar pausa ao Android
+  5, atacando o encerramento observado com Waze aberto e iPhone em paisagem;
+- restaura os controles de anterior, play/pause e próxima na tela do player;
+- unifica comandos da tela, MediaSession, broadcast legado e controles
+  Bluetooth HID no mesmo transporte DACP para o iPhone;
+- congela mapa, rota, rede, tema automático e proteção térmica da 1.8.11.
+
 ## 1.8.7 — 2026-08-21
 
 - troca o cálculo visual por rotas automobilísticas do Apple MapKit, respeitando a malha viária e as restrições disponíveis no serviço;
