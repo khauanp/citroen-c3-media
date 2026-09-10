@@ -1,5 +1,36 @@
 # Continuidade do projeto
 
+## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.13
+
+Resultado real da 1.8.12 no K00E:
+
+- o encerramento entre faixas automáticas aparentemente foi eliminado;
+- restam encerramentos raros durante mudança manual pela Central de Controle;
+- anterior, play/pause e próxima aparecem e respondem ao toque, mas nenhum
+  comando controla o iPhone;
+- todo o restante foi aceito e permanece congelado.
+
+Diagnóstico e escopo desta revisão:
+
+1. A 1.8.12 ainda cria uma `MediaSession` e publica `PlaybackState` no framework
+   de mídia do Android 5. Como o usuário usa AUX e não precisa do tablet como
+   player AVRCP do rádio, essa publicação será removida; somente os receptores
+   de teclas Bluetooth/HID serão mantidos.
+2. O comando da tela chega ao serviço, mas o `DacpController` depende apenas da
+   descoberta NSD. No Android 5 em modo hotspot esse caminho pode não encontrar
+   o serviço `_dacp._tcp` anunciado pelo iPhone.
+3. A resolução DACP passará a normalizar `DACP-ID`, tentar resolução direta pelo
+   nome `iTunes_Ctrl_<id>` e usar descoberta NSD como fallback, preservando e
+   reenviando o comando pendente depois da resolução.
+4. Erros do NSD/HTTP continuarão isolados fora da thread da interface; nenhuma
+   falha de controle poderá encerrar o receptor AirPlay.
+
+Partes congeladas: mapa, rota, tiles, rede `Citroen C3`, áudio nativo, buffers,
+tema automático, limites térmicos, app do iPhone e aparência da 1.8.12.
+
+Critérios: build API 21, prova de ausência de `MediaSession`/`PlaybackState`,
+prova dos dois caminhos DACP e preservação byte a byte do escopo congelado.
+
 ## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.12
 
 Resultado real da 1.8.11 no K00E:
