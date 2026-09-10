@@ -1,5 +1,48 @@
 # Continuidade do projeto
 
+## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.12
+
+Resultado real da 1.8.11 no K00E:
+
+- troca manual de faixas usando somente música ficou estável;
+- com Waze aberto e o iPhone em paisagem, a passagem automática entre faixas
+  ainda pode encerrar o aplicativo do tablet;
+- imediatamente antes do encerramento, o painel muda para `PAUSADO` durante o
+  intervalo silencioso entre a faixa antiga e a nova;
+- os métodos DACP de anterior, play/pause e próxima existem e chegam ao serviço,
+  mas a tela atual não desenha os controles nem trata seus toques;
+- o mapa/rota e o novo visual foram aceitos e ficam congelados nesta revisão.
+
+Diagnóstico confirmado no APK 1.8.11:
+
+1. O watchdog de áudio transforma apenas 3,5 s sem amostras em pausa real e
+   publica `PlaybackState.STATE_PAUSED` imediatamente na `MediaSession` do
+   Android 5. Essa transição coincide exatamente com o encerramento observado.
+2. A desmontagem definitiva da sessão já tem uma margem separada de 15 s; logo,
+   o evento de 3,5 s não prova desconexão e deve ser tratado como transição de
+   faixa/interrupção transitória.
+3. O `DashboardView` do APK contém a infraestrutura dos comandos, porém perdeu
+   tanto o desenho dos três botões quanto as áreas de toque.
+4. O receptor legado aceita `ACTION_MEDIA_BUTTON`, mas controles Bluetooth HID
+   podem entregar `KeyEvent` diretamente à Activity. Os dois caminhos precisam
+   convergir para o mesmo DACP enviado ao iPhone.
+
+Escopo autorizado para 1.8.12:
+
+- manter o estado reproduzindo durante um intervalo transitório entre faixas e
+  só aceitar pausa por silêncio após uma margem segura;
+- não publicar pausa transitória ao subsistema de mídia antigo;
+- restaurar controles visíveis de anterior, play/pause e próxima abaixo das
+  informações da música;
+- receber play/pause, próxima e anterior via MediaSession, broadcast legado e
+  `KeyEvent` HID da Activity, sempre com apenas um comando DACP por acionamento;
+- não alterar mapa, rota, tiles, rede `Citroen C3`, tema ou limites térmicos;
+- documentar, validar, versionar e enviar cada etapa antes do pacote final.
+
+Teste físico obrigatório: repetir duas transições automáticas com Waze em
+paisagem, testar os três botões na tela e, quando disponível, testar o controle
+universal Bluetooth. Compilação automatizada não substitui esse teste no carro.
+
 ## Checkpoint físico — 9 de setembro de 2026 — preparar 1.8.11
 
 Base funcional informada pelo usuário: 1.8.9. A manutenção será construída sobre
