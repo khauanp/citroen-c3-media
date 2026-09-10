@@ -149,6 +149,10 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     fun previousTrack() = dacp.previous()
 
+    fun dispatchMediaKey(keyCode: Int) {
+        if (::radioMediaSession.isInitialized) radioMediaSession.dispatchMediaKey(keyCode)
+    }
+
     private fun waitForHotspot(attempt: Int) {
         if (hotspotController.isActive() || attempt >= 30) {
             startupPending = false
