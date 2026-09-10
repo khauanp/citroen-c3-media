@@ -65,10 +65,10 @@ class RadioMediaSession(private val service: AirPlayService) {
                     override fun onSkipToNext() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_NEXT)
                     override fun onSkipToPrevious() = dispatchMediaKey(KeyEvent.KEYCODE_MEDIA_PREVIOUS)
 
-                    override fun onMediaButtonEvent(mediaButtonIntent: Intent?): Boolean {
+                    override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
                         @Suppress("DEPRECATION")
                         val event = mediaButtonIntent
-                            ?.getParcelableExtra(Intent.EXTRA_KEY_EVENT) as? KeyEvent
+                            .getParcelableExtra(Intent.EXTRA_KEY_EVENT) as? KeyEvent
                         if (event?.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                             dispatchMediaKey(event.keyCode)
                             return true
