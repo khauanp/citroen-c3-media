@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.12 — em preparação
+## 1.8.12 — 2026-09-10
 
 - tolera o silêncio transitório entre faixas antes de publicar pausa ao Android
   5, atacando o encerramento observado com Waze aberto e iPhone em paisagem;
