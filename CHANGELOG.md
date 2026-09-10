@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.13 — em preparação
+## 1.8.13 — 2026-09-10
 
 - remove a publicação de estado pela `MediaSession` do Android 5, mantendo os
   receptores de teclas Bluetooth sem envolver o framework instável;
@@ -8,6 +8,8 @@
   para os controles realmente alcançarem o iPhone;
 - preserva integralmente mapa, rede, tema, térmica, áudio nativo e interface da
   1.8.12, exceto pela correção funcional dos botões já exibidos.
+- usa o comando DACP `playpause` para não depender do estado `pausado`
+  transitório informado pelo iPhone entre duas faixas.
 
 ## 1.8.12 — 2026-09-10
 

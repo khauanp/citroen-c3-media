@@ -31,6 +31,21 @@ tema automático, limites térmicos, app do iPhone e aparência da 1.8.12.
 Critérios: build API 21, prova de ausência de `MediaSession`/`PlaybackState`,
 prova dos dois caminhos DACP e preservação byte a byte do escopo congelado.
 
+Resultado de implementação e empacotamento:
+
+- GitHub Actions Android #50: sucesso no commit
+  `ae6380557ec26a44fa143a6f11d2a134933987c8`;
+- classes Kotlin Android 5 e testes unitários compilaram sem erro;
+- APK reconstruído desde a base 1.8.1 e comparado com a 1.8.12;
+- `MediaSession` e `PlaybackState` foram removidos do caminho de teclas;
+- anterior, próximo e `playpause` foram encontrados no bytecode DACP final;
+- mapa, rota, tiles, rede `Citroen C3`, tema, térmica, interface, recursos e
+  bibliotecas nativas passaram na trava de preservação;
+- APK assinado SHA-256:
+  `b62674b29392c3109049b06c053649debcf70935a9f270b28f73d3bb4451ef34`;
+- permanece necessário validar fisicamente no K00E os três botões e repetir
+  trocas manuais pelo Centro de Controle durante uma transição de faixa.
+
 ## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.12
 
 Resultado real da 1.8.11 no K00E:
