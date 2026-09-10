@@ -43,6 +43,22 @@ Teste físico obrigatório: repetir duas transições automáticas com Waze em
 paisagem, testar os três botões na tela e, quando disponível, testar o controle
 universal Bluetooth. Compilação automatizada não substitui esse teste no carro.
 
+Resultado de implementação e empacotamento:
+
+- GitHub Actions `Build K00E 1.8.12 stable controls APK`, execução 46: sucesso;
+- Kotlin/API 21, reconstrução apktool e verificador de escopo: sucesso;
+- silêncio transitório elevado de 3,5 s para 12 s; a `MediaSession` aplica uma
+  segunda margem de 12 s antes de publicar `STATE_PAUSED` ao Android antigo;
+- nova amostra de áudio cancela a pausa pendente sem reiniciar o receptor;
+- controles de tela chamam os mesmos métodos DACP já usados pelo serviço;
+- MediaSession, broadcast legado e teclas HID 79/85/87/88/126/127 convergem
+  para um único despachante, ignorando repetição de tecla;
+- métodos de mapa/rota/tile, recursos, bibliotecas, rede, tema e política térmica
+  foram confirmados idênticos à 1.8.11;
+- APK assinado com v1/v2/v3 e o certificado das versões 1.8.2–1.8.11;
+- APK final SHA-256
+  `0bfe38435d95f2b06dab0fb3f91f9be1ff13339c6b36be1546aa06c1674d4e8d`.
+
 ## Checkpoint físico — 9 de setembro de 2026 — preparar 1.8.11
 
 Base funcional informada pelo usuário: 1.8.9. A manutenção será construída sobre
