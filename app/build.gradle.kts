@@ -121,5 +121,6 @@ tasks.withType<Zip>().configureEach {
 
 dependencies {
     implementation(libs.oboe)
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
     testImplementation(libs.junit)
 }
