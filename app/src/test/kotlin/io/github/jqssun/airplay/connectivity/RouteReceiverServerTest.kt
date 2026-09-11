@@ -33,7 +33,9 @@ class RouteReceiverServerTest {
                 "/set-route?waze_url=javascript%3Aalert(1)",
                 "/set-route?waze_url=file%3A%2F%2F%2Fetc%2Fhosts",
                 "/set-route?waze_url=$encoded&waze_url=$encoded")) {
-                assertEquals(400 to "PARAMETRO_INVALIDO", request(path))
+                val response = request(path)
+                println("Route rejection: $path -> $response")
+                assertEquals(path, 400 to "PARAMETRO_INVALIDO", response)
             }
             assertEquals(400, request("/set-route?waze_url=$encoded", "POST").first)
             assertEquals(1, received.size)
