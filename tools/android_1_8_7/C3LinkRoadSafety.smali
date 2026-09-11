@@ -14,6 +14,8 @@
 
 .field private static final paint:Landroid/graphics/Paint;
 
+.field private static volatile routeProgressIndex:I
+
 .field private static volatile speedLimitKph:D
 
 
@@ -346,6 +348,14 @@
     return v3
 .end method
 
+.method public static getRouteProgressIndex()I
+    .locals 1
+
+    sget v0, Lio/github/jqssun/airplay/connectivity/C3LinkRoadSafety;->routeProgressIndex:I
+
+    return v0
+.end method
+
 .method public static reset()V
     .locals 2
 
@@ -360,6 +370,10 @@
     sput-wide v0, Lio/github/jqssun/airplay/connectivity/C3LinkRoadSafety;->cameraDistanceMeters:D
 
     sput-wide v0, Lio/github/jqssun/airplay/connectivity/C3LinkRoadSafety;->cameraLimitKph:D
+
+    const/4 v0, -0x1
+
+    sput v0, Lio/github/jqssun/airplay/connectivity/C3LinkRoadSafety;->routeProgressIndex:I
 
     return-void
 .end method
@@ -408,6 +422,16 @@
     move-result-wide v2
 
     sput-wide v2, Lio/github/jqssun/airplay/connectivity/C3LinkRoadSafety;->cameraLimitKph:D
+
+    const-string v2, "routeProgressIndex"
+
+    const/4 v3, -0x1
+
+    invoke-virtual {p0, v2, v3}, Lorg/json/JSONObject;->optInt(Ljava/lang/String;I)I
+
+    move-result v2
+
+    sput v2, Lio/github/jqssun/airplay/connectivity/C3LinkRoadSafety;->routeProgressIndex:I
 
     return-void
 .end method

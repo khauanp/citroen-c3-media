@@ -460,6 +460,7 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
             stepDistanceMeters: stepDistance,
             remainingDistanceMeters: routeRemaining,
             remainingSeconds: remainingSeconds,
+            routeProgressIndex: nearest.index,
             speedLimitKph: currentSpeedLimitKph,
             camera: nextCamera
         )

@@ -182,6 +182,7 @@ final class C3LinkTransport: ObservableObject {
         stepDistanceMeters: Double,
         remainingDistanceMeters: Double,
         remainingSeconds: Double,
+        routeProgressIndex: Int,
         speedLimitKph: Double?,
         camera: UpcomingCamera?
     ) {
@@ -197,6 +198,7 @@ final class C3LinkTransport: ObservableObject {
             "stepDistanceMeters": stepDistanceMeters,
             "remainingDistanceMeters": remainingDistanceMeters,
             "remainingSeconds": remainingSeconds,
+            "routeProgressIndex": max(0, routeProgressIndex),
         ]
         if let speedLimitKph { payload["speedLimitKph"] = speedLimitKph }
         if let camera {
