@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from verify_android_1_8_5_maintenance import require_equal_tree
+from verify_android_1_8_5_maintenance import method, require_equal_tree
 from verify_android_1_8_8_stability import all_smali
 
 
@@ -27,15 +27,18 @@ def main() -> int:
     dashboard = new[Path("io/github/jqssun/airplay/ui/DashboardView.smali")]
     activity = new[Path("io/github/jqssun/airplay/MainActivity.smali")]
     service = new[Path("io/github/jqssun/airplay/service/AirPlayService.smali")]
-    forbidden = (
-        b"drawPlayerControls", b"onPrevious()V", b"onPlayPause()V", b"onNext()V",
-        b"dispatchMediaKey(I)V",
-    )
+    forbidden = (b"drawPlayerControls", b"dispatchMediaKey(I)V")
     for marker in forbidden:
         if marker in dashboard or marker in activity:
             raise RuntimeError(f"tablet control code remains: {marker!r}")
     if b"dispatchMediaKey(I)V" in service:
         raise RuntimeError("tablet/physical command bridge remains in the receiver service")
+    old_dashboard = old[Path("io/github/jqssun/airplay/ui/DashboardView.smali")]
+    old_activity = old[Path("io/github/jqssun/airplay/MainActivity.smali")]
+    if method(dashboard, b"public onTouchEvent(Landroid/view/MotionEvent;)Z") != method(old_dashboard, b"public onTouchEvent(Landroid/view/MotionEvent;)Z"):
+        raise RuntimeError("tablet touch behavior differs from control-free 1.8.11")
+    if activity != old_activity:
+        raise RuntimeError("Activity key/control behavior differs from control-free 1.8.11")
     if b"AUDIO_PLAYBACK_IDLE_MS:J = 0x2ee0L" not in service or b"const-wide/16 v3, 0x2ee0" not in service:
         raise RuntimeError("the 1.8.12 12-second track-transition guard is missing")
 
