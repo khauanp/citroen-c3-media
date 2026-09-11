@@ -1,4 +1,4 @@
-name: Build K00E 1.8.19 WebView route APK
+name: Build K00E 1.8.20 WebView route APK
 
 on:
   push:
@@ -57,7 +57,7 @@ jobs:
           (cd build/helper-dex && zip -q ../helper.apk classes.dex)
           java -jar build/apktool.jar d -f -r -o build/helper-decoded build/helper.apk
 
-      - name: Build frozen 1.8.16 reference and final 1.8.19 WebView route viewer
+      - name: Build frozen 1.8.16 reference and final 1.8.20 WebView route viewer
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -67,18 +67,18 @@ jobs:
           java -jar build/apktool.jar b build/reference-1816 -o build/reference-1816.apk
           java -jar build/apktool.jar d -f -o build/reference-1816-rebuilt build/reference-1816.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_19_webview_ui.py build/patched build/helper-decoded
-          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.19-K00E-unsigned.apk
-          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.19-K00E-unsigned.apk
+          python3 tools/apply_android_1_8_20_direct_route.py build/patched build/helper-decoded
+          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.20-K00E-unsigned.apk
+          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.20-K00E-unsigned.apk
 
       - name: Verify isolated route viewer and preserved media service
         run: |
-          python3 tools/verify_android_1_8_19_webview_ui.py build/reference-1816-rebuilt build/rebuilt
-          unzip -t build/C3-Media-1.8.19-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_20_direct_route.py build/reference-1816-rebuilt build/rebuilt
+          unzip -t build/C3-Media-1.8.20-K00E-unsigned.apk
 
       - name: Upload unsigned WebView route APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.19-K00E-unsigned
-          path: build/C3-Media-1.8.19-K00E-unsigned.apk
+          name: C3-Media-1.8.20-K00E-unsigned
+          path: build/C3-Media-1.8.20-K00E-unsigned.apk
           if-no-files-found: error

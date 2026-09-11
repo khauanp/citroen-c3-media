@@ -27,7 +27,7 @@ class RouteReceiverServerTest {
             }
             val route = "https://embed.waze.com/iframe?lat=-23.5&lon=-46.6&zoom=14"
             val encoded = URLEncoder.encode(route, "UTF-8")
-            assertEquals(200 to "ROTA_RECEBIDA", request("/set-route?waze_url=$encoded"))
+            assertEquals(200 to "OK", request("/set-route?waze_url=$encoded"))
             assertEquals(listOf(route), received.toList())
             for (path in listOf("/wrong", "/set-route", "/set-route?waze_url=",
                 "/set-route?waze_url=javascript%3Aalert(1)",

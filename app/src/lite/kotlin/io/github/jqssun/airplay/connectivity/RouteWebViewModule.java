@@ -22,7 +22,7 @@ public final class RouteWebViewModule {
     private final Activity activity;
     private View mapLayout;
     private WebView webView;
-    private View closeMapButton;
+    private View btnFechar;
     private RouteReceiverServer server;
 
     private RouteWebViewModule(Activity activity) {
@@ -75,9 +75,9 @@ public final class RouteWebViewModule {
         webView.setBackgroundColor(Color.TRANSPARENT);
         settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
         settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        closeMapButton = mapLayout.findViewById(activity.getResources().getIdentifier(
+        btnFechar = mapLayout.findViewById(activity.getResources().getIdentifier(
             "closeWazeButton", "id", activity.getPackageName()));
-        closeMapButton.setOnClickListener(new View.OnClickListener() {
+        btnFechar.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
                 try {
                     webView.stopLoading();
@@ -87,7 +87,7 @@ public final class RouteWebViewModule {
                     android.util.Log.w("C3Route", "Map unload failed", failure);
                 } finally {
                     webView.setVisibility(View.GONE);
-                    closeMapButton.setVisibility(View.GONE);
+                    btnFechar.setVisibility(View.GONE);
                     mapLayout.setVisibility(View.GONE);
                     content.setVisibility(View.VISIBLE);
                 }
@@ -111,19 +111,15 @@ public final class RouteWebViewModule {
                     activity.runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            if (webView != null && !activity.isDestroyed()) {
+                            if (webView != null && btnFechar != null && !activity.isDestroyed()) {
                                 placeOverMap(content);
                                 mapLayout.setVisibility(View.VISIBLE);
                                 webView.setVisibility(View.VISIBLE);
-                                closeMapButton.setVisibility(View.VISIBLE);
-                                closeMapButton.bringToFront();
+                                btnFechar.setVisibility(View.VISIBLE);
+                                webView.bringToFront();
+                                btnFechar.bringToFront();
                                 try {
-                                    String escaped = wazeUrl.replace("&", "&amp;").replace("\"", "&quot;")
-                                        .replace("<", "&lt;").replace(">", "&gt;");
-                                    String shell = "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
-                                        + "<style>html,body,iframe{margin:0;width:100%;height:100%;border:0;background:transparent}</style>"
-                                        + "</head><body><iframe src=\"" + escaped + "\"></iframe></body></html>";
-                                    webView.loadDataWithBaseURL("https://embed.waze.com/", shell, "text/html", "UTF-8", null);
+                                    webView.loadUrl(wazeUrl);
                                 } catch (RuntimeException failure) {
                                     mapLayout.setVisibility(View.GONE);
                                     android.util.Log.e("C3Route", "Route display failed", failure);
@@ -175,6 +171,6 @@ public final class RouteWebViewModule {
             webView = null;
         }
         mapLayout = null;
-        closeMapButton = null;
+        btnFechar = null;
     }
 }

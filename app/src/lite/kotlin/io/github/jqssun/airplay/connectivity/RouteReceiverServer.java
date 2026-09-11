@@ -59,7 +59,7 @@ public final class RouteReceiverServer extends NanoHTTPD {
                 return newFixedLengthResponse(
                     Response.Status.OK,
                     MIME_PLAINTEXT,
-                    "ROTA_RECEBIDA"
+                    "OK"
                 );
             }
         }
