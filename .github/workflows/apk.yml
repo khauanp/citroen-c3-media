@@ -1,4 +1,4 @@
-name: Build K00E 1.8.15 startup recovery APK
+name: Build K00E 1.8.16 media lock APK
 
 on:
   push:
@@ -51,7 +51,7 @@ jobs:
           (cd build/helper-dex && zip -q ../helper.apk classes.dex)
           java -jar build/apktool.jar d -f -r -o build/helper-decoded build/helper.apk
 
-      - name: Build 1.8.11, 1.8.12 and final 1.8.15 recovery
+      - name: Build frozen 1.8.11 reference and final 1.8.16 media lock
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -60,23 +60,19 @@ jobs:
           python3 tools/apply_android_1_8_11_daylight.py build/reference-1811 build/helper-decoded
           java -jar build/apktool.jar b build/reference-1811 -o build/reference-1811.apk
           java -jar build/apktool.jar d -f -o build/reference-1811-rebuilt build/reference-1811.apk
-          cp -a build/original build/reference-1812
-          python3 tools/apply_android_1_8_12_controls.py build/reference-1812 build/helper-decoded
-          java -jar build/apktool.jar b build/reference-1812 -o build/reference-1812.apk
-          java -jar build/apktool.jar d -f -o build/reference-1812-rebuilt build/reference-1812.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_15_recovery.py build/patched build/helper-decoded
-          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.15-K00E-unsigned.apk
-          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.15-K00E-unsigned.apk
+          python3 tools/apply_android_1_8_16_media_lock.py build/patched build/helper-decoded
+          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.16-K00E-unsigned.apk
+          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.16-K00E-unsigned.apk
 
-      - name: Verify boot rollback and preserved resources
+      - name: Verify locked media lifecycle and preserved resources
         run: |
-          python3 tools/verify_android_1_8_15_recovery.py build/reference-1811-rebuilt build/reference-1812-rebuilt build/rebuilt
-          unzip -t build/C3-Media-1.8.15-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_16_media_lock.py build/reference-1811-rebuilt build/rebuilt
+          unzip -t build/C3-Media-1.8.16-K00E-unsigned.apk
 
-      - name: Upload unsigned maintenance APK
+      - name: Upload unsigned media-lock APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.15-K00E-unsigned
-          path: build/C3-Media-1.8.15-K00E-unsigned.apk
+          name: C3-Media-1.8.16-K00E-unsigned
+          path: build/C3-Media-1.8.16-K00E-unsigned.apk
           if-no-files-found: error
