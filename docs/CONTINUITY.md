@@ -47,12 +47,13 @@ Resultado de implementação e empacotamento:
   escura antes de desenhar rota, radar e cartões;
 - o C3 Link transmite `routeProgressIndex` calculado sobre a rota MapKit e o
   tablet escurece somente os segmentos já percorridos;
-- GitHub Actions Android #56: sucesso no commit remoto
-  `4ded1ab3878f8e9280d64641b680868d9cb02cfc`;
+- GitHub Actions Android #58: sucesso no commit remoto
+  `ed902fe353762bbeacd7ca83ff82841a9f2cad4b`, incluindo a geração limpa do
+  cache raster;
 - GitHub Actions iPhone #49: testes Swift, compilação ARM64, versão 1.8.14 build
   14 e empacotamento do IPA: sucesso;
 - APK assinado com o mesmo certificado das versões 1.8.2–1.8.13, SHA-256
-  `3f391ab1fcd24601953b78ba67c962c4efcd631e08d6cd818bd5808f7273f80a`;
+  `47929eb7ad27bfa4b801ebe4358761b9214cec618a6dff9098e7ca89cfc47213`;
 - IPA sem assinatura SHA-256
   `e1d612774d46ef1e5eb37ea7cca4587a64168c7b49da804edead2134c97c0bbd`.
 
