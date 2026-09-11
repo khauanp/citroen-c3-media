@@ -30,6 +30,37 @@ Critérios antes da entrega: build API 21, ausência de controles de mídia no
 Dashboard, mídia igual à 1.8.12, teste de leitura/escrita MBTiles, prova de
 fallback sem tela preta, testes Swift, APK assinado e IPA ARM64 empacotado.
 
+Resultado de implementação e empacotamento:
+
+- o patch Android 1.8.14 parte da 1.8.11, reaplica somente a tolerância de 12 s
+  da 1.8.12 e deliberadamente não executa os patches de controles 1.8.12/1.8.13;
+- `DashboardView.onTouchEvent` e `MainActivity` foram comparados com a 1.8.11
+  sem controles; não existe desenho `drawPlayerControls` nem ponte
+  `dispatchMediaKey` no serviço final;
+- `DacpController` e `RadioMediaSession` são os binários compilados das classes
+  restauradas da 1.8.12;
+- `c3-map.mbtiles` usa esquema MBTiles/TMS, WAL, gravação transacional, validação
+  PNG 256 x 256 e limite de 256 MB; o cache antigo permanece como fallback de
+  migração e para mostrar o último tile durante atualização;
+- o modo diurno deixa o mapa-base sem película; o modo noturno aplica a película
+  escura antes de desenhar rota, radar e cartões;
+- o C3 Link transmite `routeProgressIndex` calculado sobre a rota MapKit e o
+  tablet escurece somente os segmentos já percorridos;
+- GitHub Actions Android #56: sucesso no commit remoto
+  `4ded1ab3878f8e9280d64641b680868d9cb02cfc`;
+- GitHub Actions iPhone #49: testes Swift, compilação ARM64, versão 1.8.14 build
+  14 e empacotamento do IPA: sucesso;
+- APK assinado com o mesmo certificado das versões 1.8.2–1.8.13, SHA-256
+  `3f391ab1fcd24601953b78ba67c962c4efcd631e08d6cd818bd5808f7273f80a`;
+- IPA sem assinatura SHA-256
+  `e1d612774d46ef1e5eb37ea7cca4587a64168c7b49da804edead2134c97c0bbd`.
+
+Limite honesto da validação: CI comprova código, protocolo e empacotamento, mas
+não reproduz a GPU, Wi-Fi ou sessão AirPlay do K00E real. O primeiro teste deve
+ser parado: duas transições automáticas de faixa, uma troca pela Central de
+Controle e movimentação curta do mapa. Trânsito ao vivo não faz parte do
+MBTiles; radar, limite, velocidade e rota continuam vindo do iPhone.
+
 ## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.13
 
 Resultado real da 1.8.12 no K00E:

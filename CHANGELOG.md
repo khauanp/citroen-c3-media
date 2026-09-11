@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.8.14 — em desenvolvimento
+## 1.8.14 — 2026-09-11
 
 - volta o receptor de áudio ao comportamento da 1.8.12 e remove integralmente
   os botões e áreas de toque de mídia adicionados ao tablet;
@@ -11,6 +11,10 @@
 - mantém radar, limite da via e velocidade atual como dados dinâmicos enviados
   pelo iPhone;
 - atualiza o C3 Link e gera um novo IPA sem assinatura.
+- limita o banco local de mapa a 256 MB e mantém o cache anterior como
+  recuperação durante a migração, sem bloquear a interface em leituras SQLite;
+- envia o índice de progresso calculado sobre a rota automobilística original,
+  sem recalcular ou simplificar ruas no tablet.
 
 ## 1.8.13 — 2026-09-10
 
