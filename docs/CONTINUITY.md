@@ -1,5 +1,35 @@
 # Continuidade do projeto
 
+## Checkpoint físico — 11 de setembro de 2026 — preparar 1.8.14
+
+Resultado real da 1.8.13 no K00E:
+
+- todas as trocas de música passaram a encerrar o aplicativo;
+- os controles na tela foram rejeitados e devem ser removidos por completo;
+- a base desejada para mídia é a 1.8.12, sem desenho, toque ou integração nova
+  dos controles do tablet;
+- rede, tema automático, temperatura e demais funções aceitas permanecem
+  congeladas.
+
+Nova integração de mapa autorizada:
+
+1. O `.mbtiles` será usado como banco SQLite persistente de tiles já validados.
+   Um mapa regional raster completo dentro do APK seria grande demais para o
+   K00E e não conteria trânsito em tempo real.
+2. O IPA solicitará somente tiles ausentes ou vencidos; o tablet os gravará de
+   forma atômica no MBTiles e continuará usando o último tile válido durante a
+   atualização, evitando quadros vazios.
+3. A renderização seguirá as referências enviadas: cartão de manobra, rota em
+   alto contraste, velocímetro, placa de limite e radares; a paleta acompanha o
+   modo diurno/noturno já existente.
+4. A rota restante será destacada e o caminho já percorrido ficará mais escuro.
+5. Trânsito/radar/velocidade/limite são sobreposições dinâmicas. MBTiles guarda
+   o mapa-base; não será apresentado como fonte de trânsito ao vivo.
+
+Critérios antes da entrega: build API 21, ausência de controles de mídia no
+Dashboard, mídia igual à 1.8.12, teste de leitura/escrita MBTiles, prova de
+fallback sem tela preta, testes Swift, APK assinado e IPA ARM64 empacotado.
+
 ## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.13
 
 Resultado real da 1.8.12 no K00E:

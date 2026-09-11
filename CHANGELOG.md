@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.14 — em desenvolvimento
+
+- volta o receptor de áudio ao comportamento da 1.8.12 e remove integralmente
+  os botões e áreas de toque de mídia adicionados ao tablet;
+- substitui o cache disperso de imagens por uma base MBTiles local e
+  persistente, abastecida pelo C3 Link somente para tiles ausentes/expirados;
+- redesenha apenas a navegação com paletas automáticas diurna/noturna, rota
+  restante destacada e trecho já percorrido escurecido;
+- mantém radar, limite da via e velocidade atual como dados dinâmicos enviados
+  pelo iPhone;
+- atualiza o C3 Link e gera um novo IPA sem assinatura.
+
 ## 1.8.13 — 2026-09-10
 
 - remove a publicação de estado pela `MediaSession` do Android 5, mantendo os
