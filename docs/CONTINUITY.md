@@ -19,6 +19,23 @@ devem ser idênticas à 1.8.11; as classes estáveis de mídia devem corresponde
 nativas devem permanecer inalterados. A integração MBTiles só poderá retornar
 depois de testada isoladamente fora da inicialização do K00E.
 
+Resultado de compilação e recuperação:
+
+- GitHub Actions Android #60: sucesso no commit remoto
+  `c725e03624a095aceb9dadd3b2d1af5de6a3c6a3`;
+- passaram os testes Kotlin/API 21, a remontagem apktool, a comparação da
+  abertura/mapa com a 1.8.11, a comparação da mídia com a 1.8.12 e a proibição
+  integral de MBTiles no APK;
+- o backup privado específico da sequência 1.8.2–1.8.14 não estava disponível
+  no armazenamento atual; para permitir a recuperação imediata, o APK foi
+  assinado com a chave privada preservada da 1.4.0, certificado SHA-256
+  `80676fc4cbaeebabd9f1f66dd1132bc988e1fd27af25116498fa24d1c4aa90af`;
+- por ser um certificado diferente, é necessário desinstalar a 1.8.14 antes de
+  instalar este APK 1.8.15; depois disso, as próximas atualizações poderão usar
+  novamente a mesma chave preservada;
+- APK assinado SHA-256
+  `35e69a9ee5bc8dbd416bed976bb5a5748229123d2dc03ea61f6b406cc135879c`.
+
 ## Checkpoint físico — 11 de setembro de 2026 — preparar 1.8.14
 
 Resultado real da 1.8.13 no K00E:

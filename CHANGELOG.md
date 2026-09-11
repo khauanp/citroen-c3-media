@@ -11,7 +11,10 @@
 - preserva a tolerância de 12 segundos da recepção de áudio da 1.8.12 e
   continua sem controles de mídia na tela do tablet;
 - adiciona uma trava de build que rejeita qualquer classe ou marcador MBTiles
-  e qualquer alteração no conjunto de classes de inicialização/mapa.
+  e qualquer alteração no conjunto de classes de inicialização/mapa;
+- oferece um APK de recuperação assinado com a chave preservada da 1.4.0; por
+  usar certificado diferente da sequência 1.8.2–1.8.14, exige desinstalação da
+  versão em loop antes da instalação.
 
 ## 1.8.14 — 2026-09-11
 
