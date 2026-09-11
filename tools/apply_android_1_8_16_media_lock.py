@@ -8,6 +8,7 @@ from pathlib import Path
 
 from apply_android_1_8_6_maintenance import replace_once
 from apply_android_1_8_11_daylight import main as apply_1_8_11
+from apply_android_1_8_15_recovery import patch_pause_guard
 
 
 SERVICE = Path("smali/io/github/jqssun/airplay/service/AirPlayService.smali")
@@ -194,6 +195,7 @@ def main() -> int:
     finally:
         sys.argv = old_argv
 
+    patch_pause_guard(root)
     patch_media_lock(root)
 
     config_file = root / "apktool.yml"

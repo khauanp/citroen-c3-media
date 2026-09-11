@@ -31,6 +31,8 @@ def main() -> int:
         raise RuntimeError("existing dashboard/map renderer changed")
     if rebuilt[SERVICE] != reference[SERVICE]:
         raise RuntimeError("1.8.16 AirPlay/media service changed")
+    if b"AUDIO_PLAYBACK_IDLE_MS:J = 0x2ee0L" not in rebuilt[SERVICE]:
+        raise RuntimeError("delivered 1.8.16 playback timer was not preserved")
 
     changed = {path for path in reference.keys() & rebuilt if reference[path] != rebuilt[path]}
     added = set(rebuilt) - set(reference)
