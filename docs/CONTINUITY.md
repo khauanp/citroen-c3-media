@@ -1,5 +1,24 @@
 # Continuidade do projeto
 
+## Recuperação física — 11 de setembro de 2026 — 1.8.15
+
+Resultado real da 1.8.14 no K00E: o C3 Link abriu normalmente no iPhone, mas o
+aplicativo do tablet entrou em loop antes de exibir a interface. Como a única
+integração de abertura nova era o banco MBTiles, essa camada foi retirada do
+caminho de inicialização.
+
+A recuperação 1.8.15 parte novamente da 1.8.11, cuja abertura foi confirmada no
+hardware. Mantém somente a tolerância de 12 segundos da mídia 1.8.12, não inclui
+os controles do tablet e não copia, inicializa nem referencia `C3MbTilesStore`.
+O mapa volta temporariamente ao renderizador raster anterior, preservando rota,
+radar, velocidade, limite, tema diurno/noturno e proteção térmica.
+
+Critérios de liberação: todas as classes de inicialização, rota, mapa e tiles
+devem ser idênticas à 1.8.11; as classes estáveis de mídia devem corresponder à
+1.8.12; nenhum marcador MBTiles pode existir no APK; recursos e bibliotecas
+nativas devem permanecer inalterados. A integração MBTiles só poderá retornar
+depois de testada isoladamente fora da inicialização do K00E.
+
 ## Checkpoint físico — 11 de setembro de 2026 — preparar 1.8.14
 
 Resultado real da 1.8.13 no K00E:

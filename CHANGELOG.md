@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.8.15 — 2026-09-11
+
+- recupera a inicialização do tablet após o loop observado fisicamente na
+  1.8.14;
+- remove integralmente o MBTiles do APK e restaura o mesmo caminho de abertura
+  e o renderizador de mapa da 1.8.11, última base confirmada como inicializável;
+- mantém rota, radar, velocidade, limite da via, tema automático e proteção
+  térmica já presentes nessa base;
+- preserva a tolerância de 12 segundos da recepção de áudio da 1.8.12 e
+  continua sem controles de mídia na tela do tablet;
+- adiciona uma trava de build que rejeita qualquer classe ou marcador MBTiles
+  e qualquer alteração no conjunto de classes de inicialização/mapa.
+
 ## 1.8.14 — 2026-09-11
 
 - volta o receptor de áudio ao comportamento da 1.8.12 e remove integralmente

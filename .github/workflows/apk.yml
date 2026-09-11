@@ -1,4 +1,4 @@
-name: Build K00E 1.8.14 stable media and MBTiles APK
+name: Build K00E 1.8.15 startup recovery APK
 
 on:
   push:
@@ -43,9 +43,7 @@ jobs:
           classes_dir="app/build/tmp/kotlin-classes/release"
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           mapfile -t helper_classes < <(find "$classes_dir/io/github/jqssun/airplay/audio" -maxdepth 1 -type f \( -name 'DacpController*.class' -o -name 'RadioMediaSession*.class' -o -name 'RadioButtonReceiver*.class' \) | sort)
-          mapfile -t mbtiles_classes < <(find "$classes_dir/io/github/jqssun/airplay/connectivity" -maxdepth 1 -type f -name 'C3MbTilesStore*.class' | sort)
-          helper_classes+=("${mbtiles_classes[@]}")
-          test "${#helper_classes[@]}" -gt 5
+          test "${#helper_classes[@]}" -gt 3
           mkdir -p build/helper-dex
           "$build_tools/d8" --min-api 21 --lib "$ANDROID_HOME/platforms/android-36/android.jar" --classpath "$classes_dir" --output build/helper-dex "${helper_classes[@]}"
           cp build/base/C3-Media-1.8.1-K00E.apk build/helper.apk
@@ -53,7 +51,7 @@ jobs:
           (cd build/helper-dex && zip -q ../helper.apk classes.dex)
           java -jar build/apktool.jar d -f -r -o build/helper-decoded build/helper.apk
 
-      - name: Build 1.8.11, 1.8.12 and final 1.8.14 references
+      - name: Build 1.8.11, 1.8.12 and final 1.8.15 recovery
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -67,18 +65,18 @@ jobs:
           java -jar build/apktool.jar b build/reference-1812 -o build/reference-1812.apk
           java -jar build/apktool.jar d -f -o build/reference-1812-rebuilt build/reference-1812.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_14_mbtiles.py build/patched build/helper-decoded
-          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.14-K00E-unsigned.apk
-          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.14-K00E-unsigned.apk
+          python3 tools/apply_android_1_8_15_recovery.py build/patched build/helper-decoded
+          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.15-K00E-unsigned.apk
+          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.15-K00E-unsigned.apk
 
-      - name: Verify rollback, map database and preserved resources
+      - name: Verify boot rollback and preserved resources
         run: |
-          python3 tools/verify_android_1_8_14_mbtiles.py build/reference-1811-rebuilt build/reference-1812-rebuilt build/rebuilt
-          unzip -t build/C3-Media-1.8.14-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_15_recovery.py build/reference-1811-rebuilt build/reference-1812-rebuilt build/rebuilt
+          unzip -t build/C3-Media-1.8.15-K00E-unsigned.apk
 
       - name: Upload unsigned maintenance APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.14-K00E-unsigned
-          path: build/C3-Media-1.8.14-K00E-unsigned.apk
+          name: C3-Media-1.8.15-K00E-unsigned
+          path: build/C3-Media-1.8.15-K00E-unsigned.apk
           if-no-files-found: error
