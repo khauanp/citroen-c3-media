@@ -26,9 +26,6 @@ import kotlin.math.min
 
 class DashboardView(context: Context) : View(context) {
     interface Actions {
-        fun onPrevious()
-        fun onPlayPause()
-        fun onNext()
         fun onConnectionHelp()
         fun onMapHelp()
         fun onMusicHelp()
@@ -221,10 +218,6 @@ class DashboardView(context: Context) : View(context) {
         text(canvas, formatTime(position), 706f, 437f, 14f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         text(canvas, formatTime(duration), 1216f, 437f, 14f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
 
-        mediaButton(canvas, 772f, 545f, 52f, false) { drawPrevious(canvas, 772f, 545f) }
-        mediaButton(canvas, 954f, 545f, 68f, true) { if (media.playing) drawPause(canvas, 954f, 545f) else drawPlay(canvas, 954f, 545f) }
-        mediaButton(canvas, 1136f, 545f, 52f, false) { drawNext(canvas, 1136f, 545f) }
-
         card(canvas, 166f, 660f, 1216f, 734f, 24f, CARD)
         statusDot(canvas, 202f, 697f, connection.radioConnected)
         text(canvas, if (connection.radioConnected) "Áudio sendo enviado ao rádio" else "Conecte o Bluetooth do rádio", 222f, 703f, 16f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
@@ -290,12 +283,7 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawRoundRect(946f, 580f, 1234f, 587f, 4f, 4f, paint)
         paint.color = WHITE
         canvas.drawRoundRect(946f, 580f, 946f + 288f * fraction.coerceIn(0f, 1f), 587f, 4f, 4f, paint)
-        mediaButton(canvas, 976f, 666f, 42f, false) { drawPrevious(canvas, 976f, 666f) }
-        mediaButton(canvas, 1090f, 666f, 55f, true) {
-            if (media.playing) drawPause(canvas, 1090f, 666f) else drawPlay(canvas, 1090f, 666f)
-        }
-        mediaButton(canvas, 1204f, 666f, 42f, false) { drawNext(canvas, 1204f, 666f) }
-        text(canvas, if (media.energy.thermalLimited) "PROTEÇÃO TÉRMICA" else "CONTROLES DE MÍDIA", 1090f, 754f, 11f, if (media.energy.thermalLimited) AMBER else MUTED_2, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
+        text(canvas, if (media.energy.thermalLimited) "PROTEÇÃO TÉRMICA" else "CONTROLE PELO IPHONE", 1090f, 754f, 11f, if (media.energy.thermalLimited) AMBER else MUTED_2, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
     }
 
     private fun drawStarting(canvas: Canvas) {
@@ -442,50 +430,6 @@ class DashboardView(context: Context) : View(context) {
         }
     }
 
-    private inline fun mediaButton(canvas: Canvas, x: Float, y: Float, radius: Float, primary: Boolean, icon: () -> Unit) {
-        paint.color = if (primary) WHITE else Color.argb(30, 255, 255, 255)
-        canvas.drawCircle(x, y, radius, paint)
-        icon()
-    }
-
-    private fun drawPrevious(canvas: Canvas, x: Float, y: Float) {
-        paint.color = WHITE
-        canvas.drawRect(x - 18f, y - 15f, x - 13f, y + 15f, paint)
-        path.reset()
-        path.moveTo(x + 16f, y - 17f)
-        path.lineTo(x - 10f, y)
-        path.lineTo(x + 16f, y + 17f)
-        path.close()
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawNext(canvas: Canvas, x: Float, y: Float) {
-        paint.color = WHITE
-        canvas.drawRect(x + 13f, y - 15f, x + 18f, y + 15f, paint)
-        path.reset()
-        path.moveTo(x - 16f, y - 17f)
-        path.lineTo(x + 10f, y)
-        path.lineTo(x - 16f, y + 17f)
-        path.close()
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawPlay(canvas: Canvas, x: Float, y: Float) {
-        paint.color = Color.BLACK
-        path.reset()
-        path.moveTo(x - 10f, y - 18f)
-        path.lineTo(x + 19f, y)
-        path.lineTo(x - 10f, y + 18f)
-        path.close()
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawPause(canvas: Canvas, x: Float, y: Float) {
-        paint.color = Color.BLACK
-        canvas.drawRoundRect(x - 14f, y - 18f, x - 5f, y + 18f, 3f, 3f, paint)
-        canvas.drawRoundRect(x + 5f, y - 18f, x + 14f, y + 18f, 3f, 3f, paint)
-    }
-
     private fun drawChevrons(canvas: Canvas, x: Float, y: Float, size: Float, color: Int) {
         paint.color = color
         chevron(canvas, x, y - size * 0.34f, size)
@@ -617,17 +561,8 @@ class DashboardView(context: Context) : View(context) {
 
             MotionEvent.ACTION_UP -> {
                 handler.removeCallbacks(settingsLongPress)
-                if (!settingsTriggered && media.mode == DisplayMode.AUDIO) {
+                if (!settingsTriggered && media.mode == DisplayMode.MIRROR) {
                     when {
-                        distance(x, y, 772f, 545f) < 82f -> touchAction { actions?.onPrevious() }
-                        distance(x, y, 954f, 545f) < 98f -> touchAction { actions?.onPlayPause() }
-                        distance(x, y, 1136f, 545f) < 82f -> touchAction { actions?.onNext() }
-                    }
-                } else if (!settingsTriggered && media.mode == DisplayMode.MIRROR) {
-                    when {
-                        distance(x, y, 976f, 666f) < 58f -> touchAction { actions?.onPrevious() }
-                        distance(x, y, 1090f, 666f) < 70f -> touchAction { actions?.onPlayPause() }
-                        distance(x, y, 1204f, 666f) < 58f -> touchAction { actions?.onNext() }
                         x in 124f..902f && y in 108f..780f -> touchAction { actions?.onMapHelp() }
                     }
                 } else if (!settingsTriggered && media.mode == DisplayMode.IDLE) {

@@ -137,14 +137,12 @@ class AirPlayService : Service(), RaopCallbackHandler {
         if (playing) {
             progressBaseMs = positionBeforeChange
             progressBaseAt = SystemClock.elapsedRealtime()
+            dacp.play()
         } else {
             progressBaseMs = positionBeforeChange
             progressBaseAt = 0L
+            dacp.pause()
         }
-        // Ask the iPhone to toggle its real state. During a track transition the
-        // RAOP status can briefly say "paused", so choosing play/pause locally
-        // can send the opposite command.
-        dacp.toggle()
     }
 
     fun nextTrack() = dacp.next()
