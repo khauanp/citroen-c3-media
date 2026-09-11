@@ -64,7 +64,7 @@ def main() -> int:
         if marker not in server:
             raise RuntimeError(f"route receiver marker missing: {marker!r}")
 
-    module = rebuilt[ROUTE_MODULE]
+    module = b"\n".join(value for path, value in rebuilt.items() if path.name.startswith("RouteWebViewModule"))
     for marker in (
         b"const/16 v", b"0x1f90", b"setJavaScriptEnabled", b"setDomStorageEnabled",
         b"setMixedContentMode", b"WebView;->loadDataWithBaseURL", b"RouteReceiverServer;->start",

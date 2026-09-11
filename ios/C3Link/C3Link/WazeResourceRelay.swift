@@ -10,8 +10,7 @@ final class WazeResourceRelay {
     private var connections: [UUID: NWConnection] = [:]
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private let session: URLSession
-    private let redirectGuard = WazeRedirectGuard()
-    private static let maximumBytes = 8 * 1024 * 1024
+    private let cellular = WazeCellularClient()
 
     init() {
         let config = URLSessionConfiguration.ephemeral
@@ -113,29 +112,15 @@ final class WazeResourceRelay {
         tasks[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                var request = URLRequest(url: url)
-                request.httpMethod = method
-                request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
-                for name in ["accept", "accept-language", "user-agent", "origin", "referer", "range"] {
-                    if let value = headers[name] { request.setValue(value, forHTTPHeaderField: name) }
-                }
-                let (bytes, response) = try await session.bytes(for: request, delegate: redirectGuard)
-                guard let http = response as? HTTPURLResponse,
-                      (200...599).contains(http.statusCode), !(300...399).contains(http.statusCode),
-                      http.expectedContentLength <= Int64(Self.maximumBytes) else { throw URLError(.badServerResponse) }
-                var data = Data()
-                for try await byte in bytes {
-                    if data.count >= Self.maximumBytes { throw URLError(.dataLengthExceedsMaximum) }
-                    data.append(byte)
-                }
+                let resource = try await cellular.fetch(url, method: method, headers: headers)
+                guard !(300...399).contains(resource.status) else { throw URLError(.badServerResponse) }
                 var output: [String: String] = [:]
                 for name in ["Content-Type", "Content-Language", "Cache-Control", "Expires", "Access-Control-Allow-Origin",
                     "Access-Control-Allow-Credentials", "Access-Control-Expose-Headers", "Content-Security-Policy",
                     "X-Frame-Options", "Content-Range", "Accept-Ranges", "Vary"] {
-                    if let value = http.value(forHTTPHeaderField: name), !value.contains("\r"), !value.contains("\n") { output[name] = value }
+                    if let value = resource.headers[name.lowercased()], !value.contains("\r"), !value.contains("\n") { output[name] = value }
                 }
-                // URLSession yields decoded bytes; never forward Content-Encoding/old Content-Length.
-                send(id, status: http.statusCode, headers: output, body: data)
+                send(id, status: resource.status, headers: output, body: resource.body)
             } catch {
                 send(id, status: 502, headers: ["Content-Type": "text/plain; charset=utf-8"], body: Data("Sem recurso pela internet do iPhone".utf8))
             }
@@ -156,14 +141,5 @@ final class WazeResourceRelay {
     private func finish(_ id: UUID) {
         tasks.removeValue(forKey: id)?.cancel()
         connections.removeValue(forKey: id)?.cancel()
-    }
-}
-
-private final class WazeRedirectGuard: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        Task { @MainActor in
-            completionHandler(request.url.map { WazeResourceRelay.allowed($0) } == true ? request : nil)
-        }
     }
 }
