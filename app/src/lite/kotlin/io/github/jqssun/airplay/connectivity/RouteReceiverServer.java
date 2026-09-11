@@ -21,8 +21,9 @@ public final class RouteReceiverServer extends NanoHTTPD {
     @Override
     public Response serve(IHTTPSession session) {
         if (session.getMethod() == Method.GET && "/set-route".equals(session.getUri())) {
-            Map<String, List<String>> parameters =
-                decodeParameters(session.getQueryParameterString());
+            // NanoHTTPD 2.3.1 may retain the previous raw query on keep-alive
+            // requests without a query. Its parsed parameters reset per request.
+            Map<String, List<String>> parameters = session.getParameters();
             List<String> values = parameters.get("waze_url");
             if (values != null && values.size() == 1 && isWebUrl(values.get(0))) {
                 if (listener != null) {
