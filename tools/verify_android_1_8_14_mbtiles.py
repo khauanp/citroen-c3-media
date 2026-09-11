@@ -58,6 +58,8 @@ def main() -> int:
     for marker in (b"C3MbTilesStore;->initialize", b"C3MbTilesStore;->read", b"C3MbTilesStore;->write"):
         if marker not in tile_store:
             raise RuntimeError(f"tile store is not wired to MBTiles: {marker!r}")
+    if b"c3-map-tiles-v3" not in tile_store or b"c3-map-tiles-v2" in tile_store:
+        raise RuntimeError("legacy black-tile cache can still be loaded")
     if b"getRouteProgressIndex()I" not in road_safety or b"getRouteProgressIndex()I" not in dashboard:
         raise RuntimeError("already-travelled route styling is not connected")
     if b"DayNightPolicy;->isDaytimeNow()Z" not in dashboard:

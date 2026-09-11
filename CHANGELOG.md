@@ -12,7 +12,9 @@
   pelo iPhone;
 - atualiza o C3 Link e gera um novo IPA sem assinatura.
 - limita o banco local de mapa a 256 MB e mantém o cache anterior como
-  recuperação durante a migração, sem bloquear a interface em leituras SQLite;
+  recuperação durante a sessão, sem bloquear a interface em leituras SQLite;
+- inicia uma geração limpa do cache raster para nunca reutilizar um quadrado
+  preto gravado pelas versões anteriores;
 - envia o índice de progresso calculado sobre a rota automobilística original,
   sem recalcular ou simplificar ruas no tablet.
 

@@ -65,6 +65,8 @@ def patch_mbtiles(root: Path) -> None:
     .line 28
 """
     value = replace_once(value, constructor_anchor, constructor_new, "MBTiles initialization")
+    value = replace_once(value, 'const-string v1, "c3-map-tiles-v2"', 'const-string v1, "c3-map-tiles-v3"', "clean legacy tile generation")
+    value = replace_once(value, 'const-string p2, "c3-map-tile-expiry-v2"', 'const-string p2, "c3-map-tile-expiry-v3"', "clean legacy expiry generation")
 
     disk_anchor = """    .line 111
     :try_start_0

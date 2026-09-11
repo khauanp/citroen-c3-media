@@ -40,8 +40,9 @@ Resultado de implementação e empacotamento:
 - `DacpController` e `RadioMediaSession` são os binários compilados das classes
   restauradas da 1.8.12;
 - `c3-map.mbtiles` usa esquema MBTiles/TMS, WAL, gravação transacional, validação
-  PNG 256 x 256 e limite de 256 MB; o cache antigo permanece como fallback de
-  migração e para mostrar o último tile durante atualização;
+  PNG 256 x 256 e limite de 256 MB; o diretório raster passa de `v2` para `v3`
+  para não reler quadrados pretos antigos e mantém apenas tiles novos como
+  fallback durante atualização;
 - o modo diurno deixa o mapa-base sem película; o modo noturno aplica a película
   escura antes de desenhar rota, radar e cartões;
 - o C3 Link transmite `routeProgressIndex` calculado sobre a rota MapKit e o
