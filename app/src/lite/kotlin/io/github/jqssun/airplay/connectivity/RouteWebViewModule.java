@@ -7,7 +7,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import java.io.IOException;
@@ -71,7 +70,6 @@ public final class RouteWebViewModule {
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        webView.setWebViewClient(new WebViewClient());
         webView.setBackgroundColor(Color.BLACK);
         mapLayout.setVisibility(View.GONE);
 
@@ -95,7 +93,12 @@ public final class RouteWebViewModule {
                                 placeOverMap(content);
                                 mapLayout.setVisibility(View.VISIBLE);
                                 try {
-                                    webView.loadUrl(wazeUrl);
+                                    String escaped = wazeUrl.replace("&", "&amp;").replace("\"", "&quot;")
+                                        .replace("<", "&lt;").replace(">", "&gt;");
+                                    String shell = "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                                        + "<style>html,body,iframe{margin:0;width:100%;height:100%;border:0;background:#111}</style>"
+                                        + "</head><body><iframe src=\"" + escaped + "\"></iframe></body></html>";
+                                    webView.loadDataWithBaseURL("https://embed.waze.com/", shell, "text/html", "UTF-8", null);
                                 } catch (RuntimeException failure) {
                                     mapLayout.setVisibility(View.GONE);
                                     android.util.Log.e("C3Route", "Route display failed", failure);
@@ -106,6 +109,8 @@ public final class RouteWebViewModule {
                 }
             }
         );
+
+        webView.setWebViewClient(new RouteProxyWebViewClient(server.getProxy()));
 
         try {
             server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);

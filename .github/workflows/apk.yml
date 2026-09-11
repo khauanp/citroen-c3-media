@@ -1,4 +1,4 @@
-name: Build K00E 1.8.17 WebView route APK
+name: Build K00E 1.8.18 WebView route APK
 
 on:
   push:
@@ -45,7 +45,7 @@ jobs:
           java_classes_dir="app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
           build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           mapfile -t helper_classes < <(find "$classes_dir/io/github/jqssun/airplay/audio" -maxdepth 1 -type f \( -name 'DacpController*.class' -o -name 'RadioMediaSession*.class' -o -name 'RadioButtonReceiver*.class' \) | sort)
-          mapfile -t route_classes < <(find "$java_classes_dir/io/github/jqssun/airplay/connectivity" -maxdepth 1 -type f \( -name 'RouteReceiverServer*.class' -o -name 'RouteWebViewModule*.class' \) | sort)
+          mapfile -t route_classes < <(find "$java_classes_dir/io/github/jqssun/airplay/connectivity" -maxdepth 1 -type f \( -name 'Route*.class' \) | sort)
           nanohttpd_jar="$(find "$HOME/.gradle/caches/modules-2/files-2.1/org.nanohttpd/nanohttpd/2.3.1" -type f -name '*.jar' | head -1)"
           test "${#helper_classes[@]}" -gt 3
           test "${#route_classes[@]}" -gt 3
@@ -57,7 +57,7 @@ jobs:
           (cd build/helper-dex && zip -q ../helper.apk classes.dex)
           java -jar build/apktool.jar d -f -r -o build/helper-decoded build/helper.apk
 
-      - name: Build frozen 1.8.16 reference and final 1.8.17 WebView route viewer
+      - name: Build frozen 1.8.16 reference and final 1.8.18 WebView route viewer
         run: |
           export XDG_DATA_HOME="$RUNNER_TEMP/apktool-data"
           export XDG_CONFIG_HOME="$RUNNER_TEMP/apktool-config"
@@ -67,18 +67,18 @@ jobs:
           java -jar build/apktool.jar b build/reference-1816 -o build/reference-1816.apk
           java -jar build/apktool.jar d -f -o build/reference-1816-rebuilt build/reference-1816.apk
           cp -a build/original build/patched
-          python3 tools/apply_android_1_8_17_webview.py build/patched build/helper-decoded
-          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.17-K00E-unsigned.apk
-          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.17-K00E-unsigned.apk
+          python3 tools/apply_android_1_8_18_proxy.py build/patched build/helper-decoded
+          java -jar build/apktool.jar b build/patched -o build/C3-Media-1.8.18-K00E-unsigned.apk
+          java -jar build/apktool.jar d -f -o build/rebuilt build/C3-Media-1.8.18-K00E-unsigned.apk
 
       - name: Verify isolated route viewer and preserved media service
         run: |
-          python3 tools/verify_android_1_8_17_webview.py build/reference-1816-rebuilt build/rebuilt
-          unzip -t build/C3-Media-1.8.17-K00E-unsigned.apk
+          python3 tools/verify_android_1_8_18_proxy.py build/reference-1816-rebuilt build/rebuilt
+          unzip -t build/C3-Media-1.8.18-K00E-unsigned.apk
 
       - name: Upload unsigned WebView route APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.17-K00E-unsigned
-          path: build/C3-Media-1.8.17-K00E-unsigned.apk
+          name: C3-Media-1.8.18-K00E-unsigned
+          path: build/C3-Media-1.8.18-K00E-unsigned.apk
           if-no-files-found: error

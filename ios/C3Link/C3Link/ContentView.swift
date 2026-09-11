@@ -14,6 +14,11 @@ struct ContentView: View {
                     LazyVStack(spacing: 16) {
                         hero
                         ConnectionCard(transport: navigation.transport, gpsStatus: navigation.locationStatus)
+                        Button("Abrir Waze no tablet") { navigation.showWazeOnTablet() }
+                            .buttonStyle(.borderedProminent)
+                        if !navigation.wazeRelayStatus.isEmpty {
+                            Text(navigation.wazeRelayStatus).font(.footnote)
+                        }
                         destinationCard
                         searchResults
                         routeMapCard

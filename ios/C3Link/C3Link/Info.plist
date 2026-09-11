@@ -15,9 +15,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.8.14</string>
+    <string>1.8.18</string>
     <key>CFBundleVersion</key>
-    <string>14</string>
+    <string>18</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>UILaunchScreen</key>
@@ -32,6 +32,11 @@
     <string>Permita localização sempre para continuar a navegação com a tela do iPhone bloqueada.</string>
     <key>NSLocalNetworkUsageDescription</key>
     <string>O C3 Link envia rota, posição e mapas diretamente ao tablet Citroën C3.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <key>UIBackgroundModes</key>
     <array>
         <string>location</string>

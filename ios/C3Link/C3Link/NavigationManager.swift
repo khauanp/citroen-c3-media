@@ -34,6 +34,20 @@ final class NavigationManager: NSObject, ObservableObject, CLLocationManagerDele
     private let roadSafetyService = RoadSafetyService()
     private let destinationImporter = DestinationLinkImporter()
     private var tileRelay: MapTileRelay!
+    private let wazeRelay = WazeResourceRelay()
+    @Published private(set) var wazeRelayStatus = ""
+
+    func showWazeOnTablet() {
+        wazeRelayStatus = "Conectando mapa ao tablet…"
+        Task {
+            do {
+                try await wazeRelay.show(latitude: currentCoordinate?.latitude, longitude: currentCoordinate?.longitude)
+                wazeRelayStatus = "Mapa enviado. Mantenha o C3 Link aberto para fornecer os recursos."
+            } catch {
+                wazeRelayStatus = "Não foi possível abrir o mapa. Confira a rede local e o APK 1.8.18."
+            }
+        }
+    }
     private var route: NavigationRoute?
     private var destination: DestinationResult?
     private var routeId = ""
