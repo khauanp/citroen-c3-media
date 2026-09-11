@@ -82,6 +82,13 @@ android {
         disable += setOf("ExpiredTargetSdkVersion", "ChromeOsAbiSupport")
     }
 
+    testOptions.unitTests.all {
+        it.testLogging {
+            showStandardStreams = true
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+    }
+
     sourceSets["main"].apply {
         manifest.srcFile("src/lite/AndroidManifest.xml")
         java.setSrcDirs(listOf("src/lite/kotlin"))
@@ -121,5 +128,6 @@ tasks.withType<Zip>().configureEach {
 
 dependencies {
     implementation(libs.oboe)
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
     testImplementation(libs.junit)
 }

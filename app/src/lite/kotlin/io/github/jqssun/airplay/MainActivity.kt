@@ -237,18 +237,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         service?.clearVideoSurface(holder.surface)
     }
 
-    override fun onPrevious() {
-        service?.previousTrack()
-    }
-
-    override fun onPlayPause() {
-        service?.togglePlayPause()
-    }
-
-    override fun onNext() {
-        service?.nextTrack()
-    }
-
     override fun onConnectionHelp() {
         showMobileDataGuide()
     }
