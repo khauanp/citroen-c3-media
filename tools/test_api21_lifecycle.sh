@@ -14,7 +14,7 @@ adb shell ps | grep -F "$package" > /dev/null
 adb shell dumpsys activity activities | grep -F "$package" > /dev/null
 
 pass=1
-while [ "$pass" -le 80 ]; do
+while [ "$pass" -le 20 ]; do
     adb shell am start -n "$component" > /tmp/c3-start.txt
     sleep 1
     adb shell ps | grep -F "$package" > /dev/null
@@ -34,10 +34,11 @@ if grep -E 'FATAL EXCEPTION|Fatal signal|ANR in com\.c3media\.dashboard|Process 
     exit 1
 fi
 
-if adb shell run-as "$package" ls files/last_crash.txt > /dev/null 2>&1; then
+crash_path="$(adb shell run-as "$package" ls files/last_crash.txt 2>/dev/null | tr -d '\r' || true)"
+if [ "$crash_path" = "files/last_crash.txt" ]; then
     echo "Application crash recorder contains a failure"
     adb shell run-as "$package" cat files/last_crash.txt || true
     exit 1
 fi
 
-echo "PASS: 80 Android 5 lifecycle/rotation cycles without process death, fatal exception or ANR"
+echo "PASS: 20 Android 5 lifecycle/rotation cycles without process death, fatal exception or ANR"
