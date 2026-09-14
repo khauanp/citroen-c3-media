@@ -8,8 +8,10 @@ apk="app/build/outputs/apk/debug/app-debug.apk"
 test -f "$apk"
 adb install -r "$apk"
 adb logcat -c
-timeout 120s adb shell am start -W -n "$component" > /tmp/c3-first-start.txt
-grep -Eq 'Status: ok|Activity:' /tmp/c3-first-start.txt
+adb shell am start -n "$component" > /tmp/c3-first-start.txt
+sleep 10
+adb shell ps | grep -F "$package" > /dev/null
+adb shell dumpsys activity activities | grep -F "$package" > /dev/null
 
 pass=1
 while [ "$pass" -le 80 ]; do
@@ -21,8 +23,10 @@ while [ "$pass" -le 80 ]; do
     pass=$((pass + 1))
 done
 
-timeout 120s adb shell am start -W -n "$component"
+adb shell am start -n "$component"
+sleep 3
 adb shell ps | grep -F "$package" > /dev/null
+adb shell dumpsys activity activities | grep -F "$package" > /dev/null
 adb logcat -d > c3-lifecycle-logcat.txt
 
 if grep -E 'FATAL EXCEPTION|Fatal signal|ANR in com\.c3media\.dashboard|Process com\.c3media\.dashboard .* has died' c3-lifecycle-logcat.txt; then
