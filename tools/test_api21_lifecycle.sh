@@ -81,4 +81,13 @@ if [ "$crash_path" = "files/last-crash.txt" ]; then
     exit 1
 fi
 
-echo "PASS: 20 Android 5 lifecycle/rotation cycles without process death, fatal exception or ANR"
+# Prove that a hard process stop is detected from the persistent session on the
+# next launch. This is deliberate and runs only after the clean stress log has
+# already passed the fatal/ANR checks above.
+adb shell am force-stop "$package"
+adb shell am start -n "$component" > /tmp/c3-diagnostic-restart.txt
+sleep 5
+adb shell run-as "$package" cat files/last-crash.txt | grep -F 'reason=UNEXPECTED_PROCESS_TERMINATION' > /dev/null
+adb shell ps | grep -F "$package" > /dev/null
+
+echo "PASS: Android 5 lifecycle/rotation and persistent unexpected-exit report"

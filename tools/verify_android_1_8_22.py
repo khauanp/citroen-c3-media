@@ -67,6 +67,8 @@ def main() -> int:
         "moveTaskToBack(true)",
         'debugDemoMode == "audio-probe"',
         'CrashDiagnostics.event("USER_ACTION"',
+        "Intent.ACTION_CREATE_DOCUMENT",
+        "offerPendingCrashReport()",
     )
     if "updateSurfaceLayout(modular" in activity or "778f * sx" in activity:
         raise RuntimeError("old reduced mirror surface remains")
@@ -94,7 +96,12 @@ def main() -> int:
     )
 
     lifecycle = (ROOT / "tools/test_api21_lifecycle.sh").read_text()
-    require(lifecycle, "C3_AUDIO_PROBE_PASS", "files/last-crash.txt")
+    require(
+        lifecycle,
+        "C3_AUDIO_PROBE_PASS",
+        "files/last-crash.txt",
+        "reason=UNEXPECTED_PROCESS_TERMINATION",
+    )
     if "files/last_crash.txt" in lifecycle:
         raise RuntimeError("obsolete crash-file spelling remains")
 
