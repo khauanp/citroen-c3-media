@@ -66,12 +66,27 @@ def main() -> int:
         "DayNightPolicy.activeBrightnessNow()",
         "moveTaskToBack(true)",
         'debugDemoMode == "audio-probe"',
+        'CrashDiagnostics.event("USER_ACTION"',
     )
     if "updateSurfaceLayout(modular" in activity or "778f * sx" in activity:
         raise RuntimeError("old reduced mirror surface remains")
 
     audio = (LITE / "kotlin/io/github/jqssun/airplay/renderer/AudioRenderer.kt").read_text()
     require(audio, "NETWORK_CUSHION_MS = 2_000", "true,\n                false,")
+
+    service = (LITE / "kotlin/io/github/jqssun/airplay/service/AirPlayService.kt").read_text()
+    require(service, "fun onAudioActivity()", 'CrashDiagnostics.event("AIRPLAY"')
+
+    diagnostics = (LITE / "kotlin/io/github/jqssun/airplay/CrashDiagnostics.kt").read_text()
+    require(
+        diagnostics,
+        "UNEXPECTED_PROCESS_TERMINATION",
+        "UNCAUGHT_EXCEPTION",
+        "diagnostics-current.log",
+        "last_uptime_ms",
+        "prompt_pending",
+        "writeReportLocked",
+    )
 
     lifecycle = (ROOT / "tools/test_api21_lifecycle.sh").read_text()
     require(lifecycle, "C3_AUDIO_PROBE_PASS", "files/last-crash.txt")

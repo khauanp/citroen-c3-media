@@ -1,6 +1,7 @@
 package io.github.jqssun.airplay.renderer
 
 import android.util.Log
+import io.github.jqssun.airplay.CrashDiagnostics
 import io.github.jqssun.airplay.bridge.NativeBridge
 
 /**
@@ -15,6 +16,7 @@ class AudioRenderer {
 
     @Synchronized
     fun attachEngine(handle: Long) {
+        CrashDiagnostics.event("AUDIO", "attach_engine handle_valid=${handle != 0L}")
         serverHandle = handle
         started = false
         if (handle == 0L) return
@@ -34,6 +36,7 @@ class AudioRenderer {
 
     @Synchronized
     fun detachEngine() {
+        CrashDiagnostics.event("AUDIO", "detach_engine started=$started")
         serverHandle = 0L
         started = false
     }
@@ -42,6 +45,7 @@ class AudioRenderer {
     fun start() {
         val handle = serverHandle
         if (handle == 0L || started) return
+        CrashDiagnostics.event("AUDIO", "start codec_output")
         started = safely("start") { NativeBridge.nativeServerAudioStart(handle) }
     }
 
@@ -53,6 +57,7 @@ class AudioRenderer {
     fun stop() {
         val handle = serverHandle
         if (handle == 0L || !started) return
+        CrashDiagnostics.event("AUDIO", "stop confirmed_long_disconnect_or_shutdown")
         safely("stop") {
             NativeBridge.nativeServerAudioStop(handle)
             true
@@ -64,6 +69,7 @@ class AudioRenderer {
     fun setFormat(codecType: Int, samplesPerFrame: Int) {
         val handle = serverHandle
         if (handle == 0L) return
+        CrashDiagnostics.event("AUDIO", "format codec=$codecType samples_per_frame=$samplesPerFrame")
         safely("format") {
             NativeBridge.nativeServerAudioFormat(handle, codecType, samplesPerFrame)
             true
@@ -75,6 +81,7 @@ class AudioRenderer {
             block()
         } catch (failure: Throwable) {
             Log.e(TAG, "Native audio $operation contained", failure)
+            CrashDiagnostics.event("AUDIO_ERROR", "$operation ${failure.javaClass.name}: ${failure.message}")
             false
         }
 

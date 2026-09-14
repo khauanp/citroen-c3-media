@@ -43,3 +43,27 @@ rotação no emulador Android 5 x86.
 
 O teste automatizado reduz o risco de regressão, mas o aceite final continua
 dependendo do iPhone e do ASUS K00E reais.
+
+## Diagnóstico persistente de encerramentos
+
+A 1.8.22 mantém um diário limitado em disco com ciclo de vida, estado do
+AirPlay, transições de áudio, espelhamento, metadados, chamadas nativas
+relevantes e um heartbeat periódico com memória disponível. Se o processo
+desaparecer sem passar por um encerramento normal, a abertura seguinte preserva
+a sessão anterior em `last-crash.txt`.
+
+Ao reabrir depois de uma falha, o app pergunta imediatamente onde o usuário
+quer salvar o relatório `.txt` pelo seletor de arquivos do Android. A opção
+"Depois" mantém o relatório no armazenamento interno e ele também permanece
+visível em Ajustes técnicos → Último relatório de falha.
+
+Esse mecanismo cobre exceções Kotlin/Java e também infere mortes nativas ou do
+sistema a partir da sessão persistente. Reinicialização do tablet e atualização
+do APK são diferenciadas para não gerar um alerta falso de falha.
+
+## Compatibilidade JNI restaurada
+
+O primeiro diagnóstico completo da pilha nativa restaurada apontou um aborto do
+Android 5 durante `nativeInit`: o binário K00E procura diretamente o callback
+público `AirPlayService.onAudioActivity()`. A 1.8.22 restaura esse método com a
+assinatura exata e impede que ele seja removido ou renomeado em builds futuros.

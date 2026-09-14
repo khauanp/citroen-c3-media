@@ -21,6 +21,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Surface
 import io.github.jqssun.airplay.C3MediaApplication
+import io.github.jqssun.airplay.CrashDiagnostics
 import io.github.jqssun.airplay.MainActivity
 import io.github.jqssun.airplay.R
 import io.github.jqssun.airplay.audio.DmapParser
@@ -36,6 +37,7 @@ import io.github.jqssun.airplay.renderer.AudioRenderer
 import io.github.jqssun.airplay.renderer.VideoRenderer
 import java.net.NetworkInterface
 import java.security.SecureRandom
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -71,6 +73,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     private val pendingArtwork = AtomicReference<ArtworkJob?>(null)
     private val artworkWorkerRunning = AtomicBoolean(false)
     private val artworkGeneration = AtomicLong(0L)
+    @Volatile private var lastDiagnosticState = ""
     private val artworkExecutor = Executors.newSingleThreadExecutor { work ->
         Thread(work, "C3MediaArtwork").apply {
             priority = Thread.MIN_PRIORITY
@@ -86,6 +89,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     override fun onCreate() {
         super.onCreate()
+        CrashDiagnostics.event("SERVICE", "onCreate")
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         hotspotController = HotspotController(this)
         energyController = EnergyController(
@@ -113,6 +117,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // START_STICKY restarts with a null intent after a native/process crash.
         // Bring the HOME dashboard back instead of leaving the ASUS launcher visible.
+        CrashDiagnostics.event("SERVICE", "onStartCommand sticky_restart=${intent == null} startId=$startId")
         if (intent == null) C3MediaApplication.scheduleDashboardRestart(this, 700L, true)
         if (!startupPending && nativeHandle == 0L && state.mode != DisplayMode.ERROR) startServer()
         return START_STICKY
@@ -192,6 +197,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     @SuppressLint("WakelockTimeout")
     private fun startServer() {
         if (nativeHandle != 0L) return
+        CrashDiagnostics.event("AIRPLAY", "server_start_requested")
         updateState(MediaState(mode = DisplayMode.STARTING, message = "Preparando conexão com o iPhone…"))
         try {
             val power = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -240,8 +246,10 @@ class AirPlayService : Service(), RaopCallbackHandler {
                 ),
             )
             Log.i(TAG, "AirPlay ready on port $port")
+            CrashDiagnostics.event("AIRPLAY", "server_ready port=$port")
         } catch (error: Throwable) {
             Log.e(TAG, "AirPlay startup failed", error)
+            CrashDiagnostics.event("AIRPLAY_ERROR", "startup ${error.javaClass.name}: ${error.message}")
             releaseNative()
             updateState(
                 MediaState(
@@ -265,10 +273,19 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     /** Called by the native audio engine; kept public because JNI resolves it by name. */
     fun onLog(message: String) {
-        try { Log.d("AirPlayNative", message) } catch (_: Throwable) {}
+        try {
+            Log.d("AirPlayNative", message)
+            val diagnostic = message.lowercase(Locale.US)
+            if (listOf("error", "fail", "fatal", "audio", "codec", "raop", "reset", "disconnect", "start", "stop")
+                    .any(diagnostic::contains)
+            ) {
+                CrashDiagnostics.event("NATIVE", message.take(2_000))
+            }
+        } catch (_: Throwable) {}
     }
 
     override fun onAudioFormat(ct: Int, spf: Int, usingScreen: Boolean) {
+        CrashDiagnostics.event("AIRPLAY", "audio_format codec=$ct spf=$spf using_screen=$usingScreen")
         markSessionActivity()
         try {
             audioManager.mode = AudioManager.MODE_NORMAL
@@ -287,6 +304,14 @@ class AirPlayService : Service(), RaopCallbackHandler {
         } catch (failure: Throwable) {
             Log.e(TAG, "Audio format transition contained", failure)
         }
+    }
+
+    /**
+     * ABI callback resolved directly on this service by the verified K00E
+     * native binary. Its public name and no-argument signature must not change.
+     */
+    fun onAudioActivity() {
+        markSessionActivity()
     }
 
     override fun onVideoSize(srcW: Float, srcH: Float, w: Float, h: Float) {
@@ -326,6 +351,10 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onAudioTeardown() {
+        CrashDiagnostics.event(
+            "AIRPLAY",
+            "audio_teardown transient_grace_ms=${SessionContinuityPolicy.TRANSIENT_PAUSE_GRACE_MS}",
+        )
         // iOS tears RAOP down between naturally advancing tracks, notifications,
         // Control Center changes and some screen transitions. Keep the native
         // renderer, audio focus, service and Activity alive. Only publish paused
@@ -344,6 +373,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onConnectionInit() {
+        CrashDiagnostics.event("AIRPLAY", "connection_init")
         val token = markSessionActivity()
         mainHandler.post {
             if (sessionGeneration.get() < token) return@post
@@ -357,6 +387,10 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onConnectionDestroy() {
+        CrashDiagnostics.event(
+            "AIRPLAY",
+            "connection_destroy grace_ms=${SessionContinuityPolicy.CONNECTION_GRACE_MS}",
+        )
         val token = sessionGeneration.incrementAndGet()
         mainHandler.post {
             val count = SessionContinuityPolicy.boundedConnectionCount(state.connectionCount, -1)
@@ -387,6 +421,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onConnectionReset(reason: Int) {
         // A reset is diagnostic only. The receiver remains registered and alive.
         Log.w(TAG, "Connection reset contained: $reason")
+        CrashDiagnostics.event("AIRPLAY", "connection_reset reason=$reason")
     }
 
     override fun onDisplayPin(pin: String) {
@@ -395,6 +430,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onMetadata(data: ByteArray) {
+        CrashDiagnostics.event("AIRPLAY", "metadata bytes=${data.size}")
         markSessionActivity()
         try {
             val info = TrackInfo.fromDmap(DmapParser.parse(data), state.track.coverArt)
@@ -449,6 +485,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onDacpId(dacpId: String, activeRemote: String) = Unit
 
     override fun onAudioOnly(audioOnly: Boolean) {
+        CrashDiagnostics.event("AIRPLAY", "mode_callback audio_only=$audioOnly")
         markSessionActivity()
         try {
             if (audioOnly) {
@@ -476,6 +513,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onVideoRate(rate: Float) = Unit
 
     override fun onVideoStop() {
+        CrashDiagnostics.event("AIRPLAY", "video_stop")
         markSessionActivity()
         try { videoRenderer.resetStream() } catch (failure: Throwable) {
             Log.e(TAG, "Video stop contained", failure)
@@ -616,6 +654,12 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     private fun updateState(next: MediaState) {
+        val diagnosticState = "mode=${next.mode} playing=${next.playing} connections=${next.connectionCount} " +
+            "track=${next.track.title.take(80)} message=${next.message.take(120)}"
+        if (diagnosticState != lastDiagnosticState) {
+            lastDiagnosticState = diagnosticState
+            CrashDiagnostics.event("STATE", diagnosticState)
+        }
         synchronized(stateLock) { state = next }
         mainHandler.post {
             val current = snapshot()
@@ -718,6 +762,10 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onDestroy() {
+        CrashDiagnostics.event(
+            "SERVICE",
+            "onDestroy mode=${state.mode} playing=${state.playing} connections=${state.connectionCount}",
+        )
         listeners.clear()
         energyController.stop()
         pendingArtwork.set(null)
@@ -732,6 +780,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        CrashDiagnostics.event("SERVICE", "onTaskRemoved scheduling_dashboard_restart")
         C3MediaApplication.scheduleDashboardRestart(this, 1_000L, false)
         super.onTaskRemoved(rootIntent)
     }

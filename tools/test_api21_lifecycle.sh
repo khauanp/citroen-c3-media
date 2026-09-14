@@ -34,7 +34,6 @@ adb shell dumpsys activity activities | grep -F "$package" > /dev/null
 # Open the real prebuilt native audio output and cycle the three AirPlay
 # formats before the lifecycle/orientation stress. This catches the exact
 # first-play regression that a UI-only demo cannot exercise.
-adb shell am force-stop "$package"
 adb shell am start -n "$component" --es debug_demo audio-probe > /tmp/c3-audio-probe.txt
 probe_wait=0
 while [ "$probe_wait" -lt 30 ]; do

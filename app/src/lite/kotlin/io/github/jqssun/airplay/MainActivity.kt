@@ -42,6 +42,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private var service: AirPlayService? = null
     private var bound = false
     private var technicalWindowOpen = false
+    private var reportPromptOpen = false
     private var debugDemoMode: String? = null
     private var lastEnergyMode = EnergyMode.ACTIVE
 
@@ -70,13 +71,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private val statusTicker = object : Runnable {
         override fun run() {
             dashboard.updateConnection(ConnectionStatusReader.read(this@MainActivity, hotspot))
-            if (debugDemoMode == null) service?.let { dashboard.updateMedia(it.snapshot()) }
+            if (debugDemoMode == null) service?.let {
+                val snapshot = it.snapshot()
+                dashboard.updateMedia(snapshot)
+                CrashDiagnostics.heartbeat(
+                    "mode=${snapshot.mode} playing=${snapshot.playing} " +
+                        "connections=${snapshot.connectionCount} track=${snapshot.track.title.take(80)}",
+                )
+            }
             handler.postDelayed(this, 1500L)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashDiagnostics.event("ACTIVITY", "onCreate")
         debugDemoMode = if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             intent.getStringExtra("debug_demo")
         } else null
@@ -96,6 +105,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         hideSystemUi()
         startReceiverService()
         handler.post(statusTicker)
+        if (debugDemoMode == null) handler.post { offerPendingCrashReport() }
     }
 
     private fun buildUi() {
@@ -270,7 +280,56 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     override fun onCloseApp() {
         // The explicit close button hides only the dashboard. Keeping the
         // foreground receiver alive preserves the selected AirPlay output.
+        CrashDiagnostics.event("USER_ACTION", "close_button_clicked dashboard_moved_to_background")
         moveTaskToBack(true)
+    }
+
+    private fun offerPendingCrashReport() {
+        if (reportPromptOpen || !CrashDiagnostics.hasPendingReport(this) || isFinishing) return
+        reportPromptOpen = true
+        AlertDialog.Builder(this)
+            .setTitle("O C3 Media fechou inesperadamente")
+            .setMessage(
+                "O processo da sessão anterior foi registrado. Escolha onde salvar o relatório " +
+                    "para que a falha possa ser analisada e corrigida na origem.",
+            )
+            .setPositiveButton("Escolher onde salvar") { _, _ ->
+                reportPromptOpen = false
+                val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TITLE, CrashDiagnostics.suggestedFileName())
+                }
+                try {
+                    startActivityForResult(saveIntent, REQUEST_SAVE_CRASH_REPORT)
+                } catch (failure: Throwable) {
+                    CrashDiagnostics.event("REPORT_ERROR", "file_picker ${failure.javaClass.name}: ${failure.message}")
+                    Toast.makeText(this, "Não foi possível abrir o seletor de arquivos.", Toast.LENGTH_LONG).show()
+                }
+            }
+            .setNegativeButton("Depois") { _, _ ->
+                reportPromptOpen = false
+                CrashDiagnostics.event("REPORT", "save_postponed")
+            }
+            .setOnCancelListener { reportPromptOpen = false }
+            .show()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SAVE_CRASH_REPORT || resultCode != RESULT_OK) return
+        val destination = data?.data ?: return
+        try {
+            contentResolver.openOutputStream(destination, "w")?.bufferedWriter()?.use {
+                it.write(CrashDiagnostics.reportText(this))
+            } ?: throw IllegalStateException("Destino de relatório indisponível")
+            CrashDiagnostics.markReportSaved(this)
+            CrashDiagnostics.event("REPORT", "saved_by_user")
+            Toast.makeText(this, "Relatório salvo.", Toast.LENGTH_LONG).show()
+        } catch (failure: Throwable) {
+            CrashDiagnostics.event("REPORT_ERROR", "save ${failure.javaClass.name}: ${failure.message}")
+            Toast.makeText(this, "Não foi possível salvar. O relatório continua guardado no app.", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onTechnicalSettings() {
@@ -298,7 +357,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             "Internet móvel no iPhone",
             "Dados da conexão",
             "Energia e temperatura",
-            "Última falha registrada",
+            "Último relatório de falha",
         )
         AlertDialog.Builder(this)
             .setTitle("Ajustes técnicos")
@@ -361,7 +420,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private fun showLastCrash() {
         val crash = filesDir.resolve(C3MediaApplication.CRASH_FILE)
         val text = try {
-            if (crash.exists()) crash.readText().take(6_000) else "Nenhuma falha Java registrada."
+            if (crash.exists()) crash.readText().take(6_000) else "Nenhum encerramento inesperado registrado."
         } catch (_: Exception) {
             "Não foi possível ler o diagnóstico."
         }
@@ -428,6 +487,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     override fun onResume() {
         super.onResume()
+        CrashDiagnostics.event("ACTIVITY", "onResume")
         hideSystemUi()
         if (technicalWindowOpen) technicalWindowOpen = false
         enterKioskIfConfigured()
@@ -436,6 +496,17 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        CrashDiagnostics.event(
+            "ACTIVITY",
+            "onNewIntent wake=${intent?.getBooleanExtra(C3MediaApplication.EXTRA_WAKE_ANIMATION, false)}",
+        )
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            intent?.getStringExtra("debug_demo")?.let { mode ->
+                debugDemoMode = mode
+                showDebugDemo()
+                if (mode == "audio-probe") service?.runDebugAudioProbe()
+            }
+        }
         if (intent?.getBooleanExtra(C3MediaApplication.EXTRA_WAKE_ANIMATION, false) == true) {
             dashboard.triggerStartupAnimation()
             wakeDisplay()
@@ -457,6 +528,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     }
 
     override fun onDestroy() {
+        CrashDiagnostics.event("ACTIVITY", "onDestroy changingConfiguration=$isChangingConfigurations")
         handler.removeCallbacksAndMessages(null)
         if (bound) {
             service?.removeListener(stateListener)
@@ -468,5 +540,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     companion object {
         private const val TECH_PIN = "0303"
+        private const val REQUEST_SAVE_CRASH_REPORT = 4312
     }
 }
