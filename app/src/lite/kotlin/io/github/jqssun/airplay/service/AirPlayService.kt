@@ -314,6 +314,16 @@ class AirPlayService : Service(), RaopCallbackHandler {
         markSessionActivity()
     }
 
+    /** Compatibility callback used by the K00E native pairing path. */
+    fun onClientApprovalRequested(name: String, model: String, address: String): Boolean {
+        CrashDiagnostics.event(
+            "AIRPLAY",
+            "client_approval name=${name.take(80)} model=${model.take(80)} address=${address.take(80)} approved=true",
+        )
+        markSessionActivity()
+        return true
+    }
+
     override fun onVideoSize(srcW: Float, srcH: Float, w: Float, h: Float) {
         markSessionActivity()
         if (w <= 0 || h <= 0) return

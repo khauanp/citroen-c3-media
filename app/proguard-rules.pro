@@ -7,6 +7,7 @@
 # Resolved directly on the concrete service by the restored K00E native stack.
 -keepclassmembers class io.github.jqssun.airplay.service.AirPlayService {
     public void onAudioActivity();
+    public boolean onClientApprovalRequested(java.lang.String, java.lang.String, java.lang.String);
 }
 
 # Keep NativeBridge native methods

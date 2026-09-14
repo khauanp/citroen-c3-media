@@ -75,7 +75,12 @@ def main() -> int:
     require(audio, "NETWORK_CUSHION_MS = 2_000", "true,\n                false,")
 
     service = (LITE / "kotlin/io/github/jqssun/airplay/service/AirPlayService.kt").read_text()
-    require(service, "fun onAudioActivity()", 'CrashDiagnostics.event("AIRPLAY"')
+    require(
+        service,
+        "fun onAudioActivity()",
+        "fun onClientApprovalRequested(name: String, model: String, address: String): Boolean",
+        'CrashDiagnostics.event("AIRPLAY"',
+    )
 
     diagnostics = (LITE / "kotlin/io/github/jqssun/airplay/CrashDiagnostics.kt").read_text()
     require(
