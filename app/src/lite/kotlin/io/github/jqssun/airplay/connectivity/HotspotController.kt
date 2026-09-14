@@ -197,7 +197,7 @@ class HotspotController(context: Context) {
     }
 
     companion object {
-        const val SSID = "Citroen C3"
+        const val SSID = "Citroen-C3"
         const val PASSWORD = "C3Media26"
         const val SUBNET_MASK = "255.255.255.0"
         private const val DEFAULT_ADDRESS = "192.168.43.1"
