@@ -53,7 +53,10 @@ class AudioRenderer {
     fun stop() {
         val handle = serverHandle
         if (handle == 0L || !started) return
-        safely("stop") { NativeBridge.nativeServerAudioStop(handle) }
+        safely("stop") {
+            NativeBridge.nativeServerAudioStop(handle)
+            true
+        }
         started = false
     }
 
