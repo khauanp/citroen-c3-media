@@ -49,7 +49,7 @@ jobs:
             for pass in $(seq 1 80); do
               adb shell am start -W -n "$component" >/tmp/c3-start.txt
               grep -Eq 'Status: ok|Activity:' /tmp/c3-start.txt
-              adb shell pidof "$package" >/dev/null
+              adb shell ps | grep -F "$package" >/dev/null
               adb shell settings put system user_rotation $((pass % 2))
               if [ $((pass % 4)) -eq 0 ]; then
                 adb shell am send-trim-memory "$package" RUNNING_LOW || true
@@ -59,7 +59,7 @@ jobs:
 
             adb shell am start -W -n "$component"
             adb shell am send-trim-memory "$package" MODERATE || true
-            adb shell pidof "$package" >/dev/null
+            adb shell ps | grep -F "$package" >/dev/null
             adb logcat -d > c3-lifecycle-logcat.txt
 
             if grep -E 'FATAL EXCEPTION|Fatal signal|ANR in com\.c3media\.dashboard|Process com\.c3media\.dashboard .* has died' c3-lifecycle-logcat.txt; then
