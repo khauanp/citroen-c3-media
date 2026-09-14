@@ -13,12 +13,16 @@ import io.github.jqssun.airplay.bridge.NativeBridge
 class AudioRenderer {
     private var serverHandle = 0L
     private var started = false
+    private var configuredCodec = -1
+    private var configuredSamplesPerFrame = -1
 
     @Synchronized
     fun attachEngine(handle: Long) {
         CrashDiagnostics.event("AUDIO", "attach_engine handle_valid=${handle != 0L}")
         serverHandle = handle
         started = false
+        configuredCodec = -1
+        configuredSamplesPerFrame = -1
         if (handle == 0L) return
         safely("configure") {
             NativeBridge.nativeServerAudioConfigure(
@@ -39,14 +43,18 @@ class AudioRenderer {
         CrashDiagnostics.event("AUDIO", "detach_engine started=$started")
         serverHandle = 0L
         started = false
+        configuredCodec = -1
+        configuredSamplesPerFrame = -1
     }
 
     @Synchronized
-    fun start() {
+    fun start(): Boolean {
         val handle = serverHandle
-        if (handle == 0L || started) return
+        if (handle == 0L) return false
+        if (started) return true
         CrashDiagnostics.event("AUDIO", "start codec_output")
         started = safely("start") { NativeBridge.nativeServerAudioStart(handle) }
+        return started
     }
 
     /**
@@ -66,14 +74,36 @@ class AudioRenderer {
     }
 
     @Synchronized
-    fun setFormat(codecType: Int, samplesPerFrame: Int) {
+    fun setFormat(codecType: Int, samplesPerFrame: Int): Boolean {
         val handle = serverHandle
-        if (handle == 0L) return
+        if (handle == 0L) return false
+        if (!isSupportedFormat(codecType, samplesPerFrame)) {
+            CrashDiagnostics.event(
+                "AUDIO_ERROR",
+                "invalid_format_ignored codec=$codecType samples_per_frame=$samplesPerFrame",
+            )
+            return false
+        }
+        if (codecType == configuredCodec && samplesPerFrame == configuredSamplesPerFrame) {
+            return true
+        }
         CrashDiagnostics.event("AUDIO", "format codec=$codecType samples_per_frame=$samplesPerFrame")
-        safely("format") {
+        val applied = safely("format") {
             NativeBridge.nativeServerAudioFormat(handle, codecType, samplesPerFrame)
             true
         }
+        if (applied) {
+            configuredCodec = codecType
+            configuredSamplesPerFrame = samplesPerFrame
+        }
+        return applied
+    }
+
+    private fun isSupportedFormat(codecType: Int, samplesPerFrame: Int): Boolean = when (codecType) {
+        CODEC_ALAC -> samplesPerFrame in 32..4_096
+        CODEC_AAC_LC -> samplesPerFrame == 960 || samplesPerFrame == 1_024
+        CODEC_AAC_ELD -> samplesPerFrame == 480 || samplesPerFrame == 512
+        else -> false
     }
 
     private inline fun safely(operation: String, block: () -> Boolean): Boolean =
@@ -92,5 +122,8 @@ class AudioRenderer {
         // avoid realtime/vendor-codec paths that can abort the whole process.
         private const val NETWORK_CUSHION_MS = 2_000
         private const val OUTPUT_BUFFER_FRAMES = 8_192
+        private const val CODEC_ALAC = 2
+        private const val CODEC_AAC_LC = 4
+        private const val CODEC_AAC_ELD = 8
     }
 }
