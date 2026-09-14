@@ -304,9 +304,13 @@ class AirPlayService : Service(), RaopCallbackHandler {
         progressBaseMs = snapshot().positionMs
         progressBaseAt = 0L
         mainHandler.postDelayed({
-            if (sessionGeneration.get() != token || state.mode == DisplayMode.MIRROR) return@postDelayed
+            if (!SessionContinuityPolicy.mayPublishPause(
+                    token,
+                    sessionGeneration.get(),
+                    state.mode == DisplayMode.MIRROR,
+                )) return@postDelayed
             updateState(state.copy(playing = false, positionMs = progressBaseMs))
-        }, TRANSIENT_PAUSE_GRACE_MS)
+        }, SessionContinuityPolicy.TRANSIENT_PAUSE_GRACE_MS)
     }
 
     override fun onConnectionInit() {
@@ -325,11 +329,15 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onConnectionDestroy() {
         val token = sessionGeneration.incrementAndGet()
         mainHandler.post {
-            val count = (state.connectionCount - 1).coerceAtLeast(0)
+            val count = SessionContinuityPolicy.boundedConnectionCount(state.connectionCount, -1)
             updateState(state.copy(connectionCount = count))
             if (count != 0) return@post
             mainHandler.postDelayed({
-                if (sessionGeneration.get() != token || state.connectionCount != 0) return@postDelayed
+                if (!SessionContinuityPolicy.mayReleaseSession(
+                    token,
+                    sessionGeneration.get(),
+                    state.connectionCount,
+                )) return@postDelayed
                 try { audioRenderer.stop() } catch (_: Throwable) {}
                 try { videoRenderer.resetStream() } catch (_: Throwable) {}
                 progressBaseMs = 0L
@@ -342,7 +350,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
                         energy = state.energy,
                     ),
                 )
-            }, CONNECTION_GRACE_MS)
+            }, SessionContinuityPolicy.CONNECTION_GRACE_MS)
         }
     }
 
@@ -376,8 +384,12 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     override fun onCoverArt(data: ByteArray) {
         markSessionActivity()
-        if (data.isEmpty() || data.size > MAX_COVER_BYTES) return
-        if (state.energy.thermalLimited || state.energy.availableMemoryMb in 1..LOW_MEMORY_MB) return
+        if (!SessionContinuityPolicy.mayDecodeArtwork(
+                data.size,
+                state.energy.thermalLimited,
+                state.energy.availableMemoryMb,
+            )
+        ) return
         val generation = artworkGeneration.incrementAndGet()
         pendingArtwork.set(ArtworkJob(generation, data.copyOf()))
         scheduleArtworkWorker()
@@ -511,9 +523,9 @@ class AirPlayService : Service(), RaopCallbackHandler {
                     while (true) {
                         val job = pendingArtwork.getAndSet(null) ?: break
                         val bitmap = decodeCoverArt(job.data) ?: continue
-                        if (job.generation != artworkGeneration.get()) continue
+                        if (!SessionContinuityPolicy.isLatestArtwork(job.generation, artworkGeneration.get())) continue
                         mainHandler.post {
-                            if (job.generation == artworkGeneration.get()) {
+                            if (SessionContinuityPolicy.isLatestArtwork(job.generation, artworkGeneration.get())) {
                                 updateState(state.copy(track = state.track.copy(coverArt = bitmap)))
                             }
                         }
@@ -533,7 +545,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     private fun decodeCoverArt(data: ByteArray): android.graphics.Bitmap? {
-        if (data.isEmpty() || data.size > MAX_COVER_BYTES) return null
+        if (!SessionContinuityPolicy.mayDecodeArtwork(data.size, false, 0L)) return null
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
@@ -701,11 +713,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
         private const val TAG = "C3MediaService"
         private const val CHANNEL_ID = "c3_media_receiver"
         private const val NOTIFICATION_ID = 303
-        private const val MAX_COVER_BYTES = 1 * 1024 * 1024
-        private const val COVER_DECODE_LIMIT = 512
+         private const val COVER_DECODE_LIMIT = 512
         private const val COVER_DISPLAY_LIMIT = 384
-        private const val LOW_MEMORY_MB = 96L
-        private const val CONNECTION_GRACE_MS = 120_000L
-        private const val TRANSIENT_PAUSE_GRACE_MS = 20_000L
-    }
+       }
 }
