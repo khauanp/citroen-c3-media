@@ -25,7 +25,7 @@ jobs:
       - name: Run session-transition stress tests
         run: |
           chmod +x gradlew
-          python3 tools/verify_android_1_8_22.py
+          python3 tools/verify_android_1_8_23.py
           for attempt in 1 2 3; do
             if ./gradlew :app:testReleaseUnitTest               --tests 'io.github.jqssun.airplay.service.SessionContinuityPolicyTest'               :app:assembleDebug --stacktrace; then
               break
@@ -49,7 +49,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.22-stability-log
+          name: C3-Media-1.8.23-stability-log
           path: |
             c3-lifecycle-logcat.txt
             c3-lifecycle-services.txt
