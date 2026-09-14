@@ -288,11 +288,21 @@ class AirPlayService : Service(), RaopCallbackHandler {
         CrashDiagnostics.event("AIRPLAY", "audio_format codec=$ct spf=$spf using_screen=$usingScreen")
         markSessionActivity()
         try {
+            // End-of-queue and interrupted iOS sessions can briefly publish an
+            // empty/unknown format. Never forward it to the old native K00E
+            // decoder, and avoid reconfiguring the decoder when the format did
+            // not actually change between tracks.
+            if (!audioRenderer.setFormat(ct, spf)) {
+                CrashDiagnostics.event("AIRPLAY", "audio_format_ignored codec=$ct spf=$spf")
+                return
+            }
             audioManager.mode = AudioManager.MODE_NORMAL
             @Suppress("DEPRECATION")
             audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-            audioRenderer.setFormat(ct, spf)
-            audioRenderer.start()
+            if (!audioRenderer.start()) {
+                CrashDiagnostics.event("AUDIO_ERROR", "output_start_rejected codec=$ct spf=$spf")
+                return
+            }
             progressBaseAt = SystemClock.elapsedRealtime()
             updateState(
                 state.copy(
@@ -442,8 +452,15 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onMetadata(data: ByteArray) {
         CrashDiagnostics.event("AIRPLAY", "metadata bytes=${data.size}")
         markSessionActivity()
+        if (!SessionContinuityPolicy.mayParseMetadata(data.size) || !hasSafeHeapHeadroom()) {
+            CrashDiagnostics.event("MEDIA_DROP", "metadata_ignored bytes=${data.size} heap_safe=${hasSafeHeapHeadroom()}")
+            return
+        }
         try {
-            val info = TrackInfo.fromDmap(DmapParser.parse(data), state.track.coverArt)
+            val parsed = TrackInfo.fromDmap(DmapParser.parse(data))
+            val sameTrack = parsed.title == state.track.title && parsed.artist == state.track.artist &&
+                parsed.album == state.track.album
+            val info = parsed.copy(coverArt = if (sameTrack) state.track.coverArt else null)
             val duration = if (info.durationMs > 0L) info.durationMs else state.durationMs
             updateState(
                 state.copy(
@@ -460,23 +477,41 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     override fun onCoverArt(data: ByteArray) {
         markSessionActivity()
-        if (!SessionContinuityPolicy.mayDecodeArtwork(
-                data.size,
-                state.energy.thermalLimited,
-                state.energy.availableMemoryMb,
-            )
-        ) return
-        val generation = artworkGeneration.incrementAndGet()
-        pendingArtwork.set(ArtworkJob(generation, data.copyOf()))
-        scheduleArtworkWorker()
+        try {
+            if (!SessionContinuityPolicy.mayDecodeArtwork(
+                    data.size,
+                    state.energy.thermalLimited,
+                    state.energy.availableMemoryMb,
+                ) || !hasSafeHeapHeadroom()
+            ) {
+                CrashDiagnostics.event("MEDIA_DROP", "cover_ignored bytes=${data.size} heap_safe=${hasSafeHeapHeadroom()}")
+                return
+            }
+            val generation = artworkGeneration.incrementAndGet()
+            // The JNI callback already gives us an owned Java ByteArray. Keeping
+            // that reference avoids the old full-size copy that doubled peak
+            // memory on every track transition.
+            pendingArtwork.set(ArtworkJob(generation, data))
+            scheduleArtworkWorker()
+        } catch (failure: OutOfMemoryError) {
+            pendingArtwork.set(null)
+            artworkGeneration.incrementAndGet()
+            CrashDiagnostics.event("MEMORY", "cover_callback_oom bytes=${data.size}")
+        } catch (failure: Throwable) {
+            pendingArtwork.set(null)
+            CrashDiagnostics.event("MEDIA_DROP", "cover_callback ${failure.javaClass.name}: ${failure.message}")
+        }
     }
 
     override fun onProgress(start: Long, curr: Long, end: Long) {
         markSessionActivity()
         try {
-            val position = (((curr - start) / 44100.0) * 1000.0).toLong().coerceAtLeast(0L)
-            val duration = (((end - start) / 44100.0) * 1000.0).toLong().coerceAtLeast(0L)
-            if (duration <= 0L) return
+            val positionFrames = Math.subtractExact(curr, start)
+            val durationFrames = Math.subtractExact(end, start)
+            if (positionFrames < 0L || durationFrames <= 0L || durationFrames > MAX_PROGRESS_FRAMES) return
+            val duration = (durationFrames * 1000.0 / AUDIO_PROGRESS_SAMPLE_RATE).toLong()
+            val position = (positionFrames * 1000.0 / AUDIO_PROGRESS_SAMPLE_RATE)
+                .toLong().coerceIn(0L, duration)
             progressBaseMs = position
             progressBaseAt = SystemClock.elapsedRealtime()
             updateState(
@@ -623,7 +658,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     private fun decodeCoverArt(data: ByteArray): android.graphics.Bitmap? {
-        if (!SessionContinuityPolicy.mayDecodeArtwork(data.size, false, 0L)) return null
+        if (!SessionContinuityPolicy.mayDecodeArtwork(data.size, false, 0L) || !hasSafeHeapHeadroom()) return null
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
@@ -645,6 +680,7 @@ class AirPlayService : Service(), RaopCallbackHandler {
             ) ?: return null
             val largest = maxOf(bitmap.width, bitmap.height)
             if (largest <= COVER_DISPLAY_LIMIT) return bitmap
+            if (!hasSafeHeapHeadroom()) return bitmap
             val ratio = COVER_DISPLAY_LIMIT.toFloat() / largest
             val scaled = android.graphics.Bitmap.createScaledBitmap(
                 bitmap,
@@ -661,6 +697,27 @@ class AirPlayService : Service(), RaopCallbackHandler {
             Log.w(TAG, "Invalid cover art ignored", error)
             null
         }
+    }
+
+    private fun hasSafeHeapHeadroom(): Boolean {
+        val runtime = Runtime.getRuntime()
+        return SessionContinuityPolicy.hasHeapHeadroom(
+            runtime.maxMemory(),
+            runtime.totalMemory(),
+            runtime.freeMemory(),
+        )
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        CrashDiagnostics.event("MEMORY", "trim level=$level")
+        val criticalWhileRunning = level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+            level == android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL
+        val processInBackground = level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
+        if (!criticalWhileRunning && !processInBackground) return
+        pendingArtwork.set(null)
+        artworkGeneration.incrementAndGet()
+        updateState(state.copy(track = state.track.copy(coverArt = null)))
     }
 
     private fun updateState(next: MediaState) {
@@ -802,7 +859,9 @@ class AirPlayService : Service(), RaopCallbackHandler {
         private const val TAG = "C3MediaService"
         private const val CHANNEL_ID = "c3_media_receiver"
         private const val NOTIFICATION_ID = 303
-         private const val COVER_DECODE_LIMIT = 512
+        private const val COVER_DECODE_LIMIT = 512
         private const val COVER_DISPLAY_LIMIT = 384
+        private const val AUDIO_PROGRESS_SAMPLE_RATE = 44_100.0
+        private const val MAX_PROGRESS_FRAMES = 44_100L * 60L * 60L * 24L
        }
 }
