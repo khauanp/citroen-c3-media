@@ -38,7 +38,7 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             package="com.c3media.dashboard"
             component="$package/io.github.jqssun.airplay.MainActivity"
             apk="app/build/outputs/apk/debug/app-debug.apk"
@@ -51,7 +51,7 @@ jobs:
               grep -Eq 'Status: ok|Activity:' /tmp/c3-start.txt
               adb shell pidof "$package" >/dev/null
               adb shell settings put system user_rotation $((pass % 2))
-              if (( pass % 4 == 0 )); then
+              if [ $((pass % 4)) -eq 0 ]; then
                 adb shell am send-trim-memory "$package" RUNNING_LOW || true
               fi
               adb shell input keyevent KEYCODE_HOME
