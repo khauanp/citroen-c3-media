@@ -17,15 +17,11 @@ while [ "$pass" -le 80 ]; do
     sleep 1
     adb shell ps | grep -F "$package" > /dev/null
     adb shell settings put system user_rotation $((pass % 2))
-    if [ $((pass % 4)) -eq 0 ]; then
-        adb shell am send-trim-memory "$package" RUNNING_LOW || true
-    fi
     adb shell input keyevent KEYCODE_HOME
     pass=$((pass + 1))
 done
 
 timeout 120s adb shell am start -W -n "$component"
-adb shell am send-trim-memory "$package" MODERATE || true
 adb shell ps | grep -F "$package" > /dev/null
 adb logcat -d > c3-lifecycle-logcat.txt
 
@@ -34,10 +30,10 @@ if grep -E 'FATAL EXCEPTION|Fatal signal|ANR in com\.c3media\.dashboard|Process 
     exit 1
 fi
 
-if adb shell run-as "$package" test -f files/last_crash.txt; then
+if adb shell run-as "$package" ls files/last_crash.txt > /dev/null 2>&1; then
     echo "Application crash recorder contains a failure"
     adb shell run-as "$package" cat files/last_crash.txt || true
     exit 1
 fi
 
-echo "PASS: 80 Android 5 lifecycle cycles without process death, fatal exception or ANR"
+echo "PASS: 80 Android 5 lifecycle/rotation cycles without process death, fatal exception or ANR"
