@@ -43,6 +43,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private var bound = false
     private var technicalWindowOpen = false
     private var reportPromptOpen = false
+    @Volatile private var reportExportOpen = false
     private var debugDemoMode: String? = null
     private var lastEnergyMode = EnergyMode.ACTIVE
 
@@ -301,10 +302,19 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
                     putExtra(Intent.EXTRA_TITLE, CrashDiagnostics.suggestedFileName())
                 }
                 try {
+                    // Device-owner lock task and the dashboard's auto-return normally
+                    // keep C3 Media above every other Activity. Suspend both while the
+                    // Android document picker owns the screen, then restore them after
+                    // the user saves or cancels.
+                    reportExportOpen = true
+                    CrashDiagnostics.event("REPORT", "file_picker_open kiosk_suspended=true")
+                    try { stopLockTask() } catch (_: Exception) {}
                     startActivityForResult(saveIntent, REQUEST_SAVE_CRASH_REPORT)
                 } catch (failure: Throwable) {
+                    reportExportOpen = false
                     CrashDiagnostics.event("REPORT_ERROR", "file_picker ${failure.javaClass.name}: ${failure.message}")
                     Toast.makeText(this, "Não foi possível abrir o seletor de arquivos.", Toast.LENGTH_LONG).show()
+                    restoreDashboardAfterReportPicker()
                 }
             }
             .setNegativeButton("Depois") { _, _ ->
@@ -317,8 +327,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQUEST_SAVE_CRASH_REPORT || resultCode != RESULT_OK) return
-        val destination = data?.data ?: return
+        if (requestCode != REQUEST_SAVE_CRASH_REPORT) return
+        reportExportOpen = false
+        val destination = data?.data
+        if (resultCode != RESULT_OK || destination == null) {
+            CrashDiagnostics.event("REPORT", "file_picker_cancelled report_preserved=true")
+            restoreDashboardAfterReportPicker()
+            return
+        }
         try {
             contentResolver.openOutputStream(destination, "w")?.bufferedWriter()?.use {
                 it.write(CrashDiagnostics.reportText(this))
@@ -329,6 +345,16 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         } catch (failure: Throwable) {
             CrashDiagnostics.event("REPORT_ERROR", "save ${failure.javaClass.name}: ${failure.message}")
             Toast.makeText(this, "Não foi possível salvar. O relatório continua guardado no app.", Toast.LENGTH_LONG).show()
+        } finally {
+            restoreDashboardAfterReportPicker()
+        }
+    }
+
+    private fun restoreDashboardAfterReportPicker() {
+        handler.post {
+            if (isFinishing || reportExportOpen) return@post
+            hideSystemUi()
+            enterKioskIfConfigured()
         }
     }
 
@@ -482,12 +508,13 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemUi()
+        if (hasFocus && !reportExportOpen) hideSystemUi()
     }
 
     override fun onResume() {
         super.onResume()
         CrashDiagnostics.event("ACTIVITY", "onResume")
+        if (reportExportOpen) return
         hideSystemUi()
         if (technicalWindowOpen) technicalWindowOpen = false
         enterKioskIfConfigured()
@@ -520,7 +547,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (!technicalWindowOpen) {
+        if (!technicalWindowOpen && !reportExportOpen) {
             handler.postDelayed({
                 startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }, 180L)
