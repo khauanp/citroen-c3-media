@@ -8,11 +8,13 @@ apk="app/build/outputs/apk/debug/app-debug.apk"
 test -f "$apk"
 adb install -r "$apk"
 adb logcat -c
+timeout 120s adb shell am start -W -n "$component" > /tmp/c3-first-start.txt
+grep -Eq 'Status: ok|Activity:' /tmp/c3-first-start.txt
 
 pass=1
 while [ "$pass" -le 80 ]; do
-    adb shell am start -W -n "$component" > /tmp/c3-start.txt
-    grep -Eq 'Status: ok|Activity:' /tmp/c3-start.txt
+    adb shell am start -n "$component" > /tmp/c3-start.txt
+    sleep 1
     adb shell ps | grep -F "$package" > /dev/null
     adb shell settings put system user_rotation $((pass % 2))
     if [ $((pass % 4)) -eq 0 ]; then
@@ -22,7 +24,7 @@ while [ "$pass" -le 80 ]; do
     pass=$((pass + 1))
 done
 
-adb shell am start -W -n "$component"
+timeout 120s adb shell am start -W -n "$component"
 adb shell am send-trim-memory "$package" MODERATE || true
 adb shell ps | grep -F "$package" > /dev/null
 adb logcat -d > c3-lifecycle-logcat.txt
