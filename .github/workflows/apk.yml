@@ -1,4 +1,4 @@
-name: Build K00E 1.8.22 full-screen stable media APK
+name: Build K00E 1.8.23 playlist-hardened media APK
 
 on:
   push:
@@ -27,7 +27,7 @@ jobs:
       - name: Build and test Android 5 x86 receiver
         run: |
           chmod +x gradlew
-          python3 tools/verify_android_1_8_22.py
+          python3 tools/verify_android_1_8_23.py
           for attempt in 1 2 3; do
             if ./gradlew :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease --stacktrace; then
               break
@@ -61,11 +61,11 @@ jobs:
             grep -Fq "$required" build-dex-strings.txt
           done
           mkdir -p build/final
-          cp "$apk" build/final/C3-Media-1.8.22-K00E-unsigned.apk
+          cp "$apk" build/final/C3-Media-1.8.23-K00E-unsigned.apk
 
       - name: Upload unsigned media-only APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.22-K00E-unsigned
-          path: build/final/C3-Media-1.8.22-K00E-unsigned.apk
+          name: C3-Media-1.8.23-K00E-unsigned
+          path: build/final/C3-Media-1.8.23-K00E-unsigned.apk
           if-no-files-found: error
