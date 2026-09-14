@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -26,13 +27,11 @@ import kotlin.math.min
 
 class DashboardView(context: Context) : View(context) {
     interface Actions {
-        fun onPrevious()
-        fun onPlayPause()
-        fun onNext()
         fun onConnectionHelp()
-        fun onMapHelp()
+        fun onMirrorHelp()
         fun onMusicHelp()
         fun onTechnicalSettings()
+        fun onCloseApp()
     }
 
     var actions: Actions? = null
@@ -90,6 +89,7 @@ class DashboardView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        applyAutomaticTheme()
         scaleX = width / DESIGN_W
         scaleY = height / DESIGN_H
         canvas.save()
@@ -100,17 +100,20 @@ class DashboardView(context: Context) : View(context) {
         } else if (media.mode == DisplayMode.STANDBY) {
             drawStandby(canvas)
         } else if (media.mode == DisplayMode.MIRROR) {
-            drawMirrorChrome(canvas)
+            drawMirrorOverlay(canvas)
         } else {
             drawBackground(canvas)
-            drawRail(canvas)
-            drawStatus(canvas)
-            when (media.mode) {
-                DisplayMode.AUDIO -> drawAudio(canvas)
-                DisplayMode.PIN -> drawPin(canvas)
-                DisplayMode.ERROR -> drawError(canvas)
-                DisplayMode.STARTING -> drawStarting(canvas)
-                else -> drawIdle(canvas)
+            if (media.mode == DisplayMode.AUDIO) {
+                drawAudio(canvas)
+            } else {
+                drawRail(canvas)
+                drawStatus(canvas)
+                when (media.mode) {
+                    DisplayMode.PIN -> drawPin(canvas)
+                    DisplayMode.ERROR -> drawError(canvas)
+                    DisplayMode.STARTING -> drawStarting(canvas)
+                    else -> drawIdle(canvas)
+                }
             }
         }
         canvas.restore()
@@ -148,16 +151,16 @@ class DashboardView(context: Context) : View(context) {
 
         drawHomeIcon(canvas, 66f, 210f, media.mode == DisplayMode.IDLE)
         drawMusicIcon(canvas, 66f, 310f, media.mode == DisplayMode.AUDIO)
-        drawMapIcon(canvas, 66f, 410f, media.mode == DisplayMode.MIRROR)
+        drawMirrorIcon(canvas, 66f, 410f, media.mode == DisplayMode.MIRROR)
         drawConnectionIcon(canvas, 66f, 650f, connection.networkReady, "REDE")
-        drawConnectionIcon(canvas, 66f, 730f, connection.radioConnected, "RÁDIO")
+        drawConnectionIcon(canvas, 66f, 730f, true, "AUX")
     }
 
     private fun drawStatus(canvas: Canvas) {
         text(canvas, "CITROËN C3", 152f, 58f, 17f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, subtitle(), 152f, 84f, 13f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         statusPill(canvas, 884f, 34f, 1018f, 76f, connection.networkReady, connection.networkLabel)
-        statusPill(canvas, 1030f, 34f, 1170f, 76f, connection.radioConnected, if (connection.radioConnected) "Rádio ligado" else "Sem rádio")
+        statusPill(canvas, 1030f, 34f, 1170f, 76f, true, "Cabo AUX")
         text(canvas, clock.format(Date()), 1242f, 65f, 24f, WHITE, Paint.Align.RIGHT, Typeface.DEFAULT_BOLD)
     }
 
@@ -181,11 +184,11 @@ class DashboardView(context: Context) : View(context) {
         step(canvas, 626f, 606f, "3", "Selecione", "Citroën C3")
 
         card(canvas, 816f, 120f, 1258f, 420f, 30f, CARD)
-        text(canvas, "WAZE", 854f, 172f, 14f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        text(canvas, "Rotas na tela", 854f, 222f, 31f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        text(canvas, "Defina a rota no celular e use", 854f, 266f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, "Espelhar a Tela. A navegação", 854f, 292f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, "aparece aqui imediatamente.", 854f, 318f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "ESPELHAMENTO", 854f, 172f, 14f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "Tela do iPhone", 854f, 222f, 31f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "Abra qualquer aplicativo e use", 854f, 266f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "Espelhar a Tela. A imagem gira", 854f, 292f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "e se ajusta sem deformação.", 854f, 318f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         drawRoute(canvas, 1055f, 350f)
 
         card(canvas, 816f, 444f, 1258f, 748f, 30f, CARD)
@@ -193,109 +196,119 @@ class DashboardView(context: Context) : View(context) {
         text(canvas, "YouTube Music", 854f, 546f, 29f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, "e Spotify", 854f, 580f, 29f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, "Toque pelo iPhone. Capa, faixa e", 854f, 626f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, "controles aparecem nesta central.", 854f, 652f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "metadados aparecem nesta central.", 854f, 652f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         drawMusicDisc(canvas, 1160f, 628f)
     }
 
     private fun HotspotLabel(): String = if (connection.hotspotActive) "Citroen-C3" else "mesma Wi-Fi"
 
     private fun drawAudio(canvas: Canvas) {
-        val artRect = RectF(166f, 138f, 656f, 628f)
-        drawArtwork(canvas, artRect, media.track.coverArt)
-        text(canvas, "TOCANDO AGORA", 706f, 180f, 14f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "CITROËN C3", 54f, 64f, 18f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "Música do iPhone", 54f, 92f, 13f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        drawCloseButton(canvas)
+
+        drawRotatingArtwork(canvas, 342f, 410f, 236f, media.track.coverArt)
+        text(canvas, "TOCANDO AGORA", 650f, 206f, 14f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         val title = media.track.title.ifBlank { "YouTube Music / Spotify" }
         val artist = media.track.artist.ifBlank { "Reproduzindo do iPhone" }
-        textFit(canvas, title, 706f, 252f, 510f, 38f, WHITE, Typeface.DEFAULT_BOLD)
-        textFit(canvas, artist, 706f, 300f, 510f, 22f, MUTED, Typeface.DEFAULT)
+        textFit(canvas, title, 650f, 290f, 548f, 42f, WHITE, Typeface.DEFAULT_BOLD)
+        textFit(canvas, artist, 650f, 346f, 548f, 23f, MUTED, Typeface.DEFAULT)
         if (media.track.album.isNotBlank()) {
-            textFit(canvas, media.track.album, 706f, 336f, 510f, 16f, MUTED_2, Typeface.DEFAULT)
+            textFit(canvas, media.track.album, 650f, 388f, 548f, 17f, MUTED_2, Typeface.DEFAULT)
         }
 
         val position = currentPosition()
         val duration = media.durationMs
         val fraction = if (duration > 0L) position.toFloat() / duration else 0f
         paint.color = DIVIDER
-        canvas.drawRoundRect(706f, 400f, 1216f, 407f, 4f, 4f, paint)
-        paint.color = WHITE
-        canvas.drawRoundRect(706f, 400f, 706f + 510f * fraction.coerceIn(0f, 1f), 407f, 4f, 4f, paint)
-        text(canvas, formatTime(position), 706f, 437f, 14f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, formatTime(duration), 1216f, 437f, 14f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
+        canvas.drawRoundRect(650f, 492f, 1198f, 502f, 5f, 5f, paint)
+        paint.color = RED
+        canvas.drawRoundRect(650f, 492f, 650f + 548f * fraction.coerceIn(0f, 1f), 502f, 5f, 5f, paint)
+        text(canvas, formatTime(position), 650f, 544f, 15f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, formatTime(duration), 1198f, 544f, 15f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
 
-        mediaButton(canvas, 772f, 545f, 52f, false) { drawPrevious(canvas, 772f, 545f) }
-        mediaButton(canvas, 954f, 545f, 68f, true) { if (media.playing) drawPause(canvas, 954f, 545f) else drawPlay(canvas, 954f, 545f) }
-        mediaButton(canvas, 1136f, 545f, 52f, false) { drawNext(canvas, 1136f, 545f) }
-
-        card(canvas, 166f, 660f, 1216f, 734f, 24f, CARD)
-        statusDot(canvas, 202f, 697f, connection.radioConnected)
-        text(canvas, if (connection.radioConnected) "Áudio sendo enviado ao rádio" else "Conecte o Bluetooth do rádio", 222f, 703f, 16f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        text(canvas, "O volume do iPhone controla a saída", 1182f, 703f, 14f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
+        card(canvas, 650f, 618f, 1198f, 704f, 24f, CARD)
+        statusDot(canvas, 686f, 661f, true)
+        text(canvas, "Áudio pelo cabo auxiliar", 708f, 668f, 17f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "Controle pelo iPhone", 1166f, 668f, 14f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
     }
 
-    private fun drawMirrorChrome(canvas: Canvas) {
-        // The SurfaceView occupies the left card. Everything drawn here is an
-        // independent touch-friendly module, similar to an in-car dashboard.
-        paint.color = BG
-        canvas.drawRect(0f, 0f, DESIGN_W, 108f, paint)
-        canvas.drawRect(0f, 108f, 124f, DESIGN_H, paint)
-        canvas.drawRect(902f, 108f, DESIGN_W, DESIGN_H, paint)
-        canvas.drawRect(124f, 780f, 902f, DESIGN_H, paint)
+    private fun drawMirrorOverlay(canvas: Canvas) {
+        // Mirroring is a single full-screen module. This layer stays transparent
+        // so VideoPipeline can show the iPhone proportionally over all 1280x800.
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        drawCloseButton(canvas)
+    }
 
-        paint.color = RAIL
-        canvas.drawRoundRect(18f, 18f, 104f, 782f, 30f, 30f, paint)
-        drawChevrons(canvas, 61f, 65f, 27f, WHITE)
-        drawConnectionIcon(canvas, 61f, 650f, connection.networkReady, "REDE")
-        drawConnectionIcon(canvas, 61f, 730f, connection.radioConnected, "RÁDIO")
+    private fun drawCloseButton(canvas: Canvas) {
+        paint.color = if (DayNightPolicy.isDaytimeNow()) Color.argb(220, 255, 255, 255)
+            else Color.argb(220, 12, 15, 20)
+        canvas.drawRoundRect(1200f, 22f, 1262f, 84f, 22f, 22f, paint)
+        linePaint.color = RED
+        linePaint.strokeWidth = 5f
+        canvas.drawLine(1219f, 41f, 1243f, 65f, linePaint)
+        canvas.drawLine(1243f, 41f, 1219f, 65f, linePaint)
+    }
 
-        paint.color = RAIL
-        canvas.drawRoundRect(122f, 18f, 1262f, 90f, 25f, 25f, paint)
-        text(canvas, "PAINEL DE VIAGEM", 150f, 62f, 17f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        statusDot(canvas, 984f, 53f, connection.radioConnected)
-        text(canvas, if (connection.radioConnected) "Áudio no rádio" else "Sem rádio", 1004f, 60f, 14f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        text(canvas, clock.format(Date()), 1232f, 62f, 24f, WHITE, Paint.Align.RIGHT, Typeface.DEFAULT_BOLD)
-
-        linePaint.color = Color.argb(135, 255, 255, 255)
-        linePaint.strokeWidth = 2f
-        canvas.drawRoundRect(124f, 108f, 902f, 780f, 25f, 25f, linePaint)
-        paint.color = Color.argb(205, 7, 9, 13)
-        canvas.drawRoundRect(146f, 130f, 314f, 176f, 19f, 19f, paint)
-        statusDot(canvas, 168f, 153f, true)
-        text(canvas, "WAZE AO VIVO", 188f, 160f, 14f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-
-        card(canvas, 918f, 108f, 1262f, 780f, 28f, Color.rgb(18, 21, 28))
-        text(canvas, "TOCANDO AGORA", 946f, 148f, 13f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        drawArtwork(canvas, RectF(946f, 170f, 1234f, 458f), media.track.coverArt)
-        textFit(
-            canvas,
-            media.track.title.ifBlank { "Música do iPhone" },
-            946f,
-            506f,
-            288f,
-            21f,
-            WHITE,
-            Typeface.DEFAULT_BOLD,
+    private fun drawRotatingArtwork(canvas: Canvas, cx: Float, cy: Float, radius: Float, bitmap: Bitmap?) {
+        val rotation = if (media.playing) (SystemClock.uptimeMillis() % 18_000L) * 360f / 18_000f else 0f
+        canvas.save()
+        canvas.rotate(rotation, cx, cy)
+        paint.shader = LinearGradient(
+            cx - radius,
+            cy - radius,
+            cx + radius,
+            cy + radius,
+            Color.rgb(8, 10, 14),
+            Color.rgb(55, 60, 70),
+            Shader.TileMode.CLAMP,
         )
-        textFit(
-            canvas,
-            media.track.artist.ifBlank { "YouTube Music / Spotify" },
-            946f,
-            542f,
-            288f,
-            16f,
-            MUTED,
-            Typeface.DEFAULT,
-        )
-        val duration = media.durationMs
-        val fraction = if (duration > 0L) currentPosition().toFloat() / duration else 0f
-        paint.color = DIVIDER
-        canvas.drawRoundRect(946f, 580f, 1234f, 587f, 4f, 4f, paint)
-        paint.color = WHITE
-        canvas.drawRoundRect(946f, 580f, 946f + 288f * fraction.coerceIn(0f, 1f), 587f, 4f, 4f, paint)
-        mediaButton(canvas, 976f, 666f, 42f, false) { drawPrevious(canvas, 976f, 666f) }
-        mediaButton(canvas, 1090f, 666f, 55f, true) {
-            if (media.playing) drawPause(canvas, 1090f, 666f) else drawPlay(canvas, 1090f, 666f)
+        canvas.drawCircle(cx, cy, radius, paint)
+        paint.shader = null
+        if (bitmap != null && !bitmap.isRecycled) {
+            canvas.save()
+            path.reset()
+            path.addCircle(cx, cy, radius - 18f, Path.Direction.CW)
+            canvas.clipPath(path)
+            val size = min(bitmap.width, bitmap.height)
+            val left = (bitmap.width - size) / 2
+            val top = (bitmap.height - size) / 2
+            val destination = RectF(
+                cx - radius + 18f,
+                cy - radius + 18f,
+                cx + radius - 18f,
+                cy + radius - 18f,
+            )
+            canvas.drawBitmap(
+                bitmap,
+                android.graphics.Rect(left, top, left + size, top + size),
+                destination,
+                paint,
+            )
+            canvas.restore()
+        } else {
+            drawMusicDisc(canvas, cx, cy, radius - 24f)
         }
-        mediaButton(canvas, 1204f, 666f, 42f, false) { drawNext(canvas, 1204f, 666f) }
-        text(canvas, if (media.energy.thermalLimited) "PROTEÇÃO TÉRMICA" else "CONTROLES DE MÍDIA", 1090f, 754f, 11f, if (media.energy.thermalLimited) AMBER else MUTED_2, Paint.Align.CENTER, Typeface.DEFAULT_BOLD)
+        paint.color = Color.argb(150, 8, 10, 14)
+        canvas.drawCircle(cx, cy, 42f, paint)
+        paint.color = RED
+        canvas.drawCircle(cx, cy, 13f, paint)
+        canvas.restore()
+        if (media.playing) postInvalidateDelayed(50L)
+    }
+
+    private fun applyAutomaticTheme() {
+        val palette = if (DayNightPolicy.isDaytimeNow()) DAY_PALETTE else NIGHT_PALETTE
+        BG = palette[0]
+        BG_2 = palette[1]
+        RAIL = palette[2]
+        CARD = palette[3]
+        DIVIDER = palette[4]
+        WHITE = palette[5]
+        MUTED = palette[6]
+        MUTED_2 = palette[7]
+        GREEN = palette[8]
+        AMBER = palette[9]
     }
 
     private fun drawStarting(canvas: Canvas) {
@@ -370,21 +383,13 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawCircle(x + 1f, y + 7f, 6f, linePaint)
     }
 
-    private fun drawMapIcon(canvas: Canvas, x: Float, y: Float, active: Boolean) {
+    private fun drawMirrorIcon(canvas: Canvas, x: Float, y: Float, active: Boolean) {
         iconBackground(canvas, x, y, active)
         linePaint.color = if (active) Color.BLACK else MUTED
         linePaint.strokeWidth = 3f
-        path.reset()
-        path.moveTo(x - 15f, y - 12f)
-        path.lineTo(x - 5f, y - 16f)
-        path.lineTo(x + 6f, y - 11f)
-        path.lineTo(x + 15f, y - 15f)
-        path.lineTo(x + 15f, y + 12f)
-        path.lineTo(x + 5f, y + 16f)
-        path.lineTo(x - 6f, y + 11f)
-        path.lineTo(x - 15f, y + 15f)
-        path.close()
-        canvas.drawPath(path, linePaint)
+        canvas.drawRoundRect(x - 17f, y - 12f, x + 17f, y + 10f, 3f, 3f, linePaint)
+        canvas.drawLine(x - 7f, y + 16f, x + 7f, y + 16f, linePaint)
+        canvas.drawLine(x, y + 10f, x, y + 16f, linePaint)
     }
 
     private fun iconBackground(canvas: Canvas, x: Float, y: Float, active: Boolean) {
@@ -440,50 +445,6 @@ class DashboardView(context: Context) : View(context) {
             paint.shader = null
             drawMusicDisc(canvas, rect.centerX(), rect.centerY(), min(64f, min(rect.width(), rect.height()) * 0.38f))
         }
-    }
-
-    private inline fun mediaButton(canvas: Canvas, x: Float, y: Float, radius: Float, primary: Boolean, icon: () -> Unit) {
-        paint.color = if (primary) WHITE else Color.argb(30, 255, 255, 255)
-        canvas.drawCircle(x, y, radius, paint)
-        icon()
-    }
-
-    private fun drawPrevious(canvas: Canvas, x: Float, y: Float) {
-        paint.color = WHITE
-        canvas.drawRect(x - 18f, y - 15f, x - 13f, y + 15f, paint)
-        path.reset()
-        path.moveTo(x + 16f, y - 17f)
-        path.lineTo(x - 10f, y)
-        path.lineTo(x + 16f, y + 17f)
-        path.close()
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawNext(canvas: Canvas, x: Float, y: Float) {
-        paint.color = WHITE
-        canvas.drawRect(x + 13f, y - 15f, x + 18f, y + 15f, paint)
-        path.reset()
-        path.moveTo(x - 16f, y - 17f)
-        path.lineTo(x + 10f, y)
-        path.lineTo(x - 16f, y + 17f)
-        path.close()
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawPlay(canvas: Canvas, x: Float, y: Float) {
-        paint.color = Color.BLACK
-        path.reset()
-        path.moveTo(x - 10f, y - 18f)
-        path.lineTo(x + 19f, y)
-        path.lineTo(x - 10f, y + 18f)
-        path.close()
-        canvas.drawPath(path, paint)
-    }
-
-    private fun drawPause(canvas: Canvas, x: Float, y: Float) {
-        paint.color = Color.BLACK
-        canvas.drawRoundRect(x - 14f, y - 18f, x - 5f, y + 18f, 3f, 3f, paint)
-        canvas.drawRoundRect(x + 5f, y - 18f, x + 14f, y + 18f, 3f, 3f, paint)
     }
 
     private fun drawChevrons(canvas: Canvas, x: Float, y: Float, size: Float, color: Int) {
@@ -617,23 +578,18 @@ class DashboardView(context: Context) : View(context) {
 
             MotionEvent.ACTION_UP -> {
                 handler.removeCallbacks(settingsLongPress)
-                if (!settingsTriggered && media.mode == DisplayMode.AUDIO) {
-                    when {
-                        distance(x, y, 772f, 545f) < 82f -> touchAction { actions?.onPrevious() }
-                        distance(x, y, 954f, 545f) < 98f -> touchAction { actions?.onPlayPause() }
-                        distance(x, y, 1136f, 545f) < 82f -> touchAction { actions?.onNext() }
-                    }
+                if (!settingsTriggered && x in 1190f..1275f && y in 10f..96f &&
+                    (media.mode == DisplayMode.MIRROR || media.mode == DisplayMode.AUDIO)
+                ) {
+                    touchAction { actions?.onCloseApp() }
                 } else if (!settingsTriggered && media.mode == DisplayMode.MIRROR) {
                     when {
-                        distance(x, y, 976f, 666f) < 58f -> touchAction { actions?.onPrevious() }
-                        distance(x, y, 1090f, 666f) < 70f -> touchAction { actions?.onPlayPause() }
-                        distance(x, y, 1204f, 666f) < 58f -> touchAction { actions?.onNext() }
-                        x in 124f..902f && y in 108f..780f -> touchAction { actions?.onMapHelp() }
+                        x in 0f..DESIGN_W && y in 0f..DESIGN_H -> touchAction { actions?.onMirrorHelp() }
                     }
                 } else if (!settingsTriggered && media.mode == DisplayMode.IDLE) {
                     when {
                         x in 146f..792f && y in 120f..748f -> touchAction { actions?.onConnectionHelp() }
-                        x in 816f..1258f && y in 120f..420f -> touchAction { actions?.onMapHelp() }
+                        x in 816f..1258f && y in 120f..420f -> touchAction { actions?.onMirrorHelp() }
                         x in 816f..1258f && y in 444f..748f -> touchAction { actions?.onMusicHelp() }
                     }
                 }
@@ -667,16 +623,28 @@ class DashboardView(context: Context) : View(context) {
     companion object {
         private const val DESIGN_W = 1280f
         private const val DESIGN_H = 800f
-        private val BG = Color.rgb(7, 9, 13)
-        private val BG_2 = Color.rgb(15, 18, 25)
-        private val RAIL = Color.rgb(20, 23, 30)
-        private val CARD = Color.rgb(24, 28, 36)
-        private val DIVIDER = Color.rgb(54, 59, 69)
-        private val WHITE = Color.rgb(242, 245, 249)
-        private val MUTED = Color.rgb(162, 169, 180)
-        private val MUTED_2 = Color.rgb(111, 119, 132)
+        private var BG = Color.rgb(7, 9, 13)
+        private var BG_2 = Color.rgb(15, 18, 25)
+        private var RAIL = Color.rgb(20, 23, 30)
+        private var CARD = Color.rgb(24, 28, 36)
+        private var DIVIDER = Color.rgb(54, 59, 69)
+        private var WHITE = Color.rgb(242, 245, 249)
+        private var MUTED = Color.rgb(162, 169, 180)
+        private var MUTED_2 = Color.rgb(111, 119, 132)
         private val RED = Color.rgb(232, 59, 69)
-        private val GREEN = Color.rgb(75, 225, 145)
-        private val AMBER = Color.rgb(245, 178, 66)
+        private var GREEN = Color.rgb(75, 225, 145)
+        private var AMBER = Color.rgb(245, 178, 66)
+        private val NIGHT_PALETTE = intArrayOf(
+            Color.rgb(7, 9, 13), Color.rgb(15, 18, 25), Color.rgb(20, 23, 30),
+            Color.rgb(24, 28, 36), Color.rgb(54, 59, 69), Color.rgb(242, 245, 249),
+            Color.rgb(162, 169, 180), Color.rgb(111, 119, 132), Color.rgb(75, 225, 145),
+            Color.rgb(245, 178, 66),
+        )
+        private val DAY_PALETTE = intArrayOf(
+            Color.rgb(232, 237, 244), Color.rgb(211, 220, 231), Color.rgb(250, 251, 253),
+            Color.rgb(255, 255, 255), Color.rgb(171, 182, 197), Color.rgb(18, 26, 38),
+            Color.rgb(57, 69, 86), Color.rgb(83, 97, 116), Color.rgb(24, 137, 83),
+            Color.rgb(176, 105, 0),
+        )
     }
 }

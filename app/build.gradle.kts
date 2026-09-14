@@ -4,12 +4,15 @@ plugins {
 }
 
 import java.util.Properties
+import java.security.MessageDigest
+import java.util.Base64
 
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
 
 val allAbis = listOf("x86")
+val generatedK00eJniRoot = layout.buildDirectory.dir("generated/k00eJniLibs").get().asFile
 
 android {
     namespace = "io.github.jqssun.airplay"
@@ -31,21 +34,8 @@ android {
         applicationId = "com.c3media.dashboard"
         minSdk = 21
         targetSdk = 28
-        versionCode = 10200
-        versionName = "1.2.0"
-
-        externalNativeBuild {
-            cmake {
-                arguments += "-DANDROID_STL=c++_shared"
-                arguments += "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
+        versionCode = 10823
+        versionName = "1.8.23"
     }
 
     buildTypes {
@@ -82,10 +72,18 @@ android {
         disable += setOf("ExpiredTargetSdkVersion", "ChromeOsAbiSupport")
     }
 
+    testOptions.unitTests.all {
+        it.testLogging {
+            showStandardStreams = true
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+    }
+
     sourceSets["main"].apply {
         manifest.srcFile("src/lite/AndroidManifest.xml")
         java.setSrcDirs(listOf("src/lite/kotlin"))
         res.setSrcDirs(listOf("src/lite/res"))
+        jniLibs.setSrcDirs(listOf(generatedK00eJniRoot))
     }
 }
 
@@ -93,26 +91,48 @@ kotlin {
     sourceSets.getByName("main").kotlin.setSrcDirs(listOf("src/lite/kotlin"))
 }
 
-tasks.register("applyUxplayPatches") {
+val verifiedK00eNativeHashes = mapOf(
+    "libairplay_native.so" to "327b381a2719aaa176f70a69d231e3c4671357c4cb0c87be74b99eb183c3e5b5",
+    "libc++_shared.so" to "649cf75deda40f5985f316d1cc63cba59466db453e610a14e983e36be0caaa94",
+    "liboboe.so" to "5541263e80ba3a4471a1372d08d1dd72fc8378d6a90deb598bf07525656c23eb",
+)
+
+val prepareK00eNativeStack = tasks.register("prepareK00eNativeStack") {
+    val encodedRoot = file("src/lite/native-prebuilt/x86")
+    inputs.dir(encodedRoot)
+    outputs.dir(generatedK00eJniRoot)
     doLast {
-        fun git(vararg args: String): String {
-            val proc = ProcessBuilder("git", "-C", "$projectDir/src/main/cpp/third_party/UxPlay", *args)
-                .redirectErrorStream(true).start()
-            val out = proc.inputStream.bufferedReader().readText()
-            check(proc.waitFor() == 0) { "git ${args.joinToString(" ")} failed:\n$out" }
-            return out
+        val targetRoot = generatedK00eJniRoot.resolve("x86").apply { mkdirs() }
+        verifiedK00eNativeHashes.keys.forEach { name ->
+            val parts = encodedRoot.listFiles { file ->
+                file.name.startsWith("$name.b64.")
+            }.orEmpty().sortedBy { it.name }
+            check(parts.isNotEmpty()) { "Missing encoded K00E native binary: $name" }
+            val encoded = buildString {
+                parts.forEach { append(it.readText(Charsets.US_ASCII)) }
+            }
+            targetRoot.resolve(name).writeBytes(Base64.getDecoder().decode(encoded))
         }
-        val patches = file("src/main/cpp/patches/UxPlay").listFiles { f -> f.extension == "patch" }!!.sorted()
-        val touched = patches.flatMap { git("apply", "--numstat", it.path).trim().lines() }
-            .map { it.substringAfterLast("\t") }.distinct()
-        git("checkout", "--", *touched.toTypedArray())
-        patches.forEach { git("apply", it.path) }
     }
 }
 
-tasks.configureEach {
-    if (name.startsWith("configureCMake")) dependsOn("applyUxplayPatches")
+val verifyK00eNativeStack = tasks.register("verifyK00eNativeStack") {
+    dependsOn(prepareK00eNativeStack)
+    doLast {
+        verifiedK00eNativeHashes.forEach { (name, expected) ->
+            val binary = generatedK00eJniRoot.resolve("x86/$name")
+            check(binary.isFile) { "Missing verified K00E native binary: $name" }
+            val actual = MessageDigest.getInstance("SHA-256")
+                .digest(binary.readBytes())
+                .joinToString("") { "%02x".format(it) }
+            check(actual == expected) {
+                "Unexpected K00E native binary $name: $actual"
+            }
+        }
+    }
 }
+
+tasks.named("preBuild").configure { dependsOn(verifyK00eNativeStack) }
 
 tasks.withType<Zip>().configureEach {
     isReproducibleFileOrder = true
@@ -120,6 +140,5 @@ tasks.withType<Zip>().configureEach {
 }
 
 dependencies {
-    implementation(libs.oboe)
     testImplementation(libs.junit)
 }

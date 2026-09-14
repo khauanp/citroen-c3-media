@@ -31,6 +31,7 @@ import io.github.jqssun.airplay.service.MediaState
 import io.github.jqssun.airplay.service.MediaStateListener
 import io.github.jqssun.airplay.power.EnergyMode
 import io.github.jqssun.airplay.ui.DashboardView
+import io.github.jqssun.airplay.ui.DayNightPolicy
 
 class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private lateinit var root: FrameLayout
@@ -41,6 +42,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private var service: AirPlayService? = null
     private var bound = false
     private var technicalWindowOpen = false
+    private var reportPromptOpen = false
+    @Volatile private var reportExportOpen = false
     private var debugDemoMode: String? = null
     private var lastEnergyMode = EnergyMode.ACTIVE
 
@@ -56,6 +59,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             if (surfaceView.holder.surface?.isValid == true) {
                 service?.setVideoSurface(surfaceView.holder.surface)
             }
+            if (debugDemoMode == "audio-probe") service?.runDebugAudioProbe()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -68,13 +72,21 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private val statusTicker = object : Runnable {
         override fun run() {
             dashboard.updateConnection(ConnectionStatusReader.read(this@MainActivity, hotspot))
-            if (debugDemoMode == null) service?.let { dashboard.updateMedia(it.snapshot()) }
+            if (debugDemoMode == null) service?.let {
+                val snapshot = it.snapshot()
+                dashboard.updateMedia(snapshot)
+                CrashDiagnostics.heartbeat(
+                    "mode=${snapshot.mode} playing=${snapshot.playing} " +
+                        "connections=${snapshot.connectionCount} track=${snapshot.track.title.take(80)}",
+                )
+            }
             handler.postDelayed(this, 1500L)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashDiagnostics.event("ACTIVITY", "onCreate")
         debugDemoMode = if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             intent.getStringExtra("debug_demo")
         } else null
@@ -84,7 +96,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
         )
-        window.attributes = window.attributes.apply { screenBrightness = 0.78f }
+        window.attributes = window.attributes.apply { screenBrightness = DayNightPolicy.activeBrightnessNow() }
         buildUi()
         if (intent.getBooleanExtra(C3MediaApplication.EXTRA_WAKE_ANIMATION, false)) {
             dashboard.triggerStartupAnimation()
@@ -94,6 +106,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         hideSystemUi()
         startReceiverService()
         handler.post(statusTicker)
+        if (debugDemoMode == null) handler.post { offerPendingCrashReport() }
     }
 
     private fun buildUi() {
@@ -146,6 +159,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
                 playing = true,
                 message = "Reproduzindo do iPhone",
             )
+            "audio-probe" -> MediaState(
+                serverRunning = true,
+                connectionCount = 1,
+                mode = DisplayMode.AUDIO,
+                track = TrackInfo(title = "Teste do receptor", artist = "C3 Media"),
+                playing = true,
+                message = "Testando saída de áudio",
+            )
             else -> return
         }
         dashboard.updateMedia(demo)
@@ -163,38 +184,29 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         applyEnergyUi(state)
         val mirror = state.mode == DisplayMode.MIRROR && state.energy.mode != EnergyMode.STANDBY
         if (mirror && surfaceView.visibility != View.VISIBLE) {
-            updateSurfaceLayout(true)
+            updateSurfaceLayout()
             surfaceView.visibility = View.VISIBLE
             surfaceView.holder.surface?.takeIf { it.isValid }?.let { service?.setVideoSurface(it) }
         } else if (!mirror && surfaceView.visibility == View.VISIBLE) {
             surfaceView.holder.surface?.takeIf { it.isValid }?.let { service?.clearVideoSurface(it) }
             surfaceView.visibility = View.INVISIBLE
-            updateSurfaceLayout(false)
+            updateSurfaceLayout()
         } else if (mirror) {
-            updateSurfaceLayout(true)
+            updateSurfaceLayout()
         }
     }
 
-    private fun updateSurfaceLayout(modular: Boolean) {
+    private fun updateSurfaceLayout() {
         val width = root.width
         val height = root.height
         if (width <= 0 || height <= 0) {
-            root.post { updateSurfaceLayout(modular) }
+            root.post { updateSurfaceLayout() }
             return
         }
-        surfaceView.layoutParams = if (modular) {
-            val sx = width / 1280f
-            val sy = height / 800f
-            FrameLayout.LayoutParams((778f * sx).toInt(), (672f * sy).toInt()).apply {
-                leftMargin = (124f * sx).toInt()
-                topMargin = (108f * sy).toInt()
-            }
-        } else {
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            )
-        }
+        surfaceView.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        )
     }
 
     private fun applyEnergyUi(state: MediaState) {
@@ -205,7 +217,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         } else {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             window.attributes = window.attributes.apply {
-                screenBrightness = if (mode == EnergyMode.THERMAL_PROTECTION) 0.42f else 0.78f
+                screenBrightness = if (mode == EnergyMode.THERMAL_PROTECTION) 0.42f
+                    else DayNightPolicy.activeBrightnessNow()
             }
             if (lastEnergyMode == EnergyMode.STANDBY) {
                 dashboard.triggerStartupAnimation()
@@ -237,31 +250,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         service?.clearVideoSurface(holder.surface)
     }
 
-    override fun onPrevious() {
-        service?.previousTrack()
-    }
-
-    override fun onPlayPause() {
-        service?.togglePlayPause()
-    }
-
-    override fun onNext() {
-        service?.nextTrack()
-    }
-
     override fun onConnectionHelp() {
         showMobileDataGuide()
     }
 
-    override fun onMapHelp() {
+    override fun onMirrorHelp() {
         AlertDialog.Builder(this)
-            .setTitle("Waze no tablet")
+            .setTitle("Espelhamento do iPhone")
             .setMessage(
-                "Defina a rota no iPhone e selecione Citroën C3 em Espelhar a Tela. " +
-                    "A imagem será girada e ajustada automaticamente sem esticar.\n\n" +
-                    "Importante: o AirPlay envia imagem e áudio, mas não envia os toques do tablet " +
-                    "de volta ao iPhone. O mapa continua sendo controlado no iPhone; os botões de " +
-                    "música da C3 Media funcionam pelo toque.",
+                "No iPhone, selecione Citroën C3 em Espelhar a Tela. Waze e outros " +
+                    "aplicativos aparecerão com rotação automática e sem esticar.\n\n" +
+                    "O AirPlay envia imagem e áudio, mas não envia os toques do tablet " +
+                    "de volta ao iPhone. Todo controle permanece no celular.",
             )
             .setPositiveButton("Entendi", null)
             .show()
@@ -272,10 +272,90 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             .setTitle("YouTube Music e Spotify")
             .setMessage(
                 "Abra a música no iPhone, toque no seletor AirPlay e escolha Citroën C3. " +
-                    "A C3 Media continuará aberta e mostrará os controles mesmo durante o Waze.",
+                    "A C3 Media continuará aberta e mostrará os metadados enviados pelo iPhone.",
             )
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    override fun onCloseApp() {
+        // The explicit close button hides only the dashboard. Keeping the
+        // foreground receiver alive preserves the selected AirPlay output.
+        CrashDiagnostics.event("USER_ACTION", "close_button_clicked dashboard_moved_to_background")
+        moveTaskToBack(true)
+    }
+
+    private fun offerPendingCrashReport() {
+        if (reportPromptOpen || !CrashDiagnostics.hasPendingReport(this) || isFinishing) return
+        reportPromptOpen = true
+        AlertDialog.Builder(this)
+            .setTitle("O C3 Media fechou inesperadamente")
+            .setMessage(
+                "O processo da sessão anterior foi registrado. Escolha onde salvar o relatório " +
+                    "para que a falha possa ser analisada e corrigida na origem.",
+            )
+            .setPositiveButton("Escolher onde salvar") { _, _ ->
+                reportPromptOpen = false
+                val saveIntent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TITLE, CrashDiagnostics.suggestedFileName())
+                }
+                try {
+                    // Device-owner lock task and the dashboard's auto-return normally
+                    // keep C3 Media above every other Activity. Suspend both while the
+                    // Android document picker owns the screen, then restore them after
+                    // the user saves or cancels.
+                    reportExportOpen = true
+                    CrashDiagnostics.event("REPORT", "file_picker_open kiosk_suspended=true")
+                    try { stopLockTask() } catch (_: Exception) {}
+                    startActivityForResult(saveIntent, REQUEST_SAVE_CRASH_REPORT)
+                } catch (failure: Throwable) {
+                    reportExportOpen = false
+                    CrashDiagnostics.event("REPORT_ERROR", "file_picker ${failure.javaClass.name}: ${failure.message}")
+                    Toast.makeText(this, "Não foi possível abrir o seletor de arquivos.", Toast.LENGTH_LONG).show()
+                    restoreDashboardAfterReportPicker()
+                }
+            }
+            .setNegativeButton("Depois") { _, _ ->
+                reportPromptOpen = false
+                CrashDiagnostics.event("REPORT", "save_postponed")
+            }
+            .setOnCancelListener { reportPromptOpen = false }
+            .show()
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SAVE_CRASH_REPORT) return
+        reportExportOpen = false
+        val destination = data?.data
+        if (resultCode != RESULT_OK || destination == null) {
+            CrashDiagnostics.event("REPORT", "file_picker_cancelled report_preserved=true")
+            restoreDashboardAfterReportPicker()
+            return
+        }
+        try {
+            contentResolver.openOutputStream(destination, "w")?.bufferedWriter()?.use {
+                it.write(CrashDiagnostics.reportText(this))
+            } ?: throw IllegalStateException("Destino de relatório indisponível")
+            CrashDiagnostics.markReportSaved(this)
+            CrashDiagnostics.event("REPORT", "saved_by_user")
+            Toast.makeText(this, "Relatório salvo.", Toast.LENGTH_LONG).show()
+        } catch (failure: Throwable) {
+            CrashDiagnostics.event("REPORT_ERROR", "save ${failure.javaClass.name}: ${failure.message}")
+            Toast.makeText(this, "Não foi possível salvar. O relatório continua guardado no app.", Toast.LENGTH_LONG).show()
+        } finally {
+            restoreDashboardAfterReportPicker()
+        }
+    }
+
+    private fun restoreDashboardAfterReportPicker() {
+        handler.post {
+            if (isFinishing || reportExportOpen) return@post
+            hideSystemUi()
+            enterKioskIfConfigured()
+        }
     }
 
     override fun onTechnicalSettings() {
@@ -298,25 +378,23 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     private fun showTechnicalMenu() {
         val items = arrayOf(
-            "Bluetooth do rádio",
             "Ponto de acesso do tablet",
             "Rede Wi-Fi alternativa",
             "Internet móvel no iPhone",
             "Dados da conexão",
             "Energia e temperatura",
-            "Última falha registrada",
+            "Último relatório de falha",
         )
         AlertDialog.Builder(this)
             .setTitle("Ajustes técnicos")
             .setItems(items) { _, index ->
                 when (index) {
-                    0 -> openSystemSettings(Settings.ACTION_BLUETOOTH_SETTINGS)
-                    1 -> openSystemSettings("android.settings.TETHER_SETTINGS")
-                    2 -> openSystemSettings(Settings.ACTION_WIFI_SETTINGS)
-                    3 -> showMobileDataGuide()
-                    4 -> showConnectionInfo()
-                    5 -> showEnergyInfo()
-                    6 -> showLastCrash()
+                    0 -> openSystemSettings("android.settings.TETHER_SETTINGS")
+                    1 -> openSystemSettings(Settings.ACTION_WIFI_SETTINGS)
+                    2 -> showMobileDataGuide()
+                    3 -> showConnectionInfo()
+                    4 -> showEnergyInfo()
+                    5 -> showLastCrash()
                 }
             }
             .setNegativeButton("Fechar", null)
@@ -332,7 +410,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             append("Endereço do tablet: ${hotspot.accessPointAddress()}\n")
             append("IP sugerido no iPhone: ${hotspot.recommendedIphoneAddress()}\n\n")
             append("Rede local: ${if (status.networkReady) "ativa" else "desconectada"}\n")
-            append("Bluetooth do rádio: ${if (status.radioConnected) "conectado" else "desconectado"}")
+            append("Saída de áudio: cabo auxiliar do tablet")
         }
         AlertDialog.Builder(this)
             .setTitle("Conexão")
@@ -355,8 +433,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             append("Temperatura: ${"%.1f".format(energy.batteryTemperatureC)} °C\n")
             append("Alimentação: ${if (energy.charging) "carregando/conectada" else "bateria"}\n")
             append("Memória livre: ${energy.availableMemoryMb} MB\n\n")
-            append("A central encerra vídeo, áudio e capas quando o iPhone sai da rede. ")
-            append("O receptor mínimo permanece pronto para detectar a volta do aparelho.")
+            append("Após uma desconexão confirmada, a central libera áudio, vídeo e capas. ")
+            append("O receptor AirPlay permanece pronto para a reconexão.")
         }
         AlertDialog.Builder(this)
             .setTitle("Gerenciamento de energia")
@@ -368,7 +446,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private fun showLastCrash() {
         val crash = filesDir.resolve(C3MediaApplication.CRASH_FILE)
         val text = try {
-            if (crash.exists()) crash.readText().take(6_000) else "Nenhuma falha Java registrada."
+            if (crash.exists()) crash.readText().take(6_000) else "Nenhum encerramento inesperado registrado."
         } catch (_: Exception) {
             "Não foi possível ler o diagnóstico."
         }
@@ -430,11 +508,13 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemUi()
+        if (hasFocus && !reportExportOpen) hideSystemUi()
     }
 
     override fun onResume() {
         super.onResume()
+        CrashDiagnostics.event("ACTIVITY", "onResume")
+        if (reportExportOpen) return
         hideSystemUi()
         if (technicalWindowOpen) technicalWindowOpen = false
         enterKioskIfConfigured()
@@ -443,6 +523,17 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
+        CrashDiagnostics.event(
+            "ACTIVITY",
+            "onNewIntent wake=${intent?.getBooleanExtra(C3MediaApplication.EXTRA_WAKE_ANIMATION, false)}",
+        )
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            intent?.getStringExtra("debug_demo")?.let { mode ->
+                debugDemoMode = mode
+                showDebugDemo()
+                if (mode == "audio-probe") service?.runDebugAudioProbe()
+            }
+        }
         if (intent?.getBooleanExtra(C3MediaApplication.EXTRA_WAKE_ANIMATION, false) == true) {
             dashboard.triggerStartupAnimation()
             wakeDisplay()
@@ -456,7 +547,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (!technicalWindowOpen) {
+        if (!technicalWindowOpen && !reportExportOpen) {
             handler.postDelayed({
                 startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }, 180L)
@@ -464,6 +555,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     }
 
     override fun onDestroy() {
+        CrashDiagnostics.event("ACTIVITY", "onDestroy changingConfiguration=$isChangingConfigurations")
         handler.removeCallbacksAndMessages(null)
         if (bound) {
             service?.removeListener(stateListener)
@@ -475,5 +567,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     companion object {
         private const val TECH_PIN = "0303"
+        private const val REQUEST_SAVE_CRASH_REPORT = 4312
     }
 }

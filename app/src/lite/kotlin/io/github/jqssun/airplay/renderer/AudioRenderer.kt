@@ -1,22 +1,37 @@
 package io.github.jqssun.airplay.renderer
 
+import android.util.Log
+import io.github.jqssun.airplay.CrashDiagnostics
 import io.github.jqssun.airplay.bridge.NativeBridge
 
-/** Small Android-5-compatible wrapper around the native Oboe audio engine. */
+/**
+ * Fault-contained wrapper around the native AirPlay audio engine.
+ *
+ * Track transitions may repeat format/start/teardown callbacks. Every operation
+ * is idempotent and no Java/Kotlin exception is allowed to cross the JNI boundary.
+ */
 class AudioRenderer {
     private var serverHandle = 0L
+    private var started = false
+    private var configuredCodec = -1
+    private var configuredSamplesPerFrame = -1
 
     @Synchronized
     fun attachEngine(handle: Long) {
+        CrashDiagnostics.event("AUDIO", "attach_engine handle_valid=${handle != 0L}")
         serverHandle = handle
-        if (handle != 0L) {
+        started = false
+        configuredCodec = -1
+        configuredSamplesPerFrame = -1
+        if (handle == 0L) return
+        safely("configure") {
             NativeBridge.nativeServerAudioConfigure(
                 handle,
-                0,
-                95,
-                0,
-                false,
+                NETWORK_CUSHION_MS,
+                99,
+                OUTPUT_BUFFER_FRAMES,
                 true,
+                false,
                 false,
                 false,
             )
@@ -25,23 +40,90 @@ class AudioRenderer {
 
     @Synchronized
     fun detachEngine() {
+        CrashDiagnostics.event("AUDIO", "detach_engine started=$started")
         serverHandle = 0L
+        started = false
+        configuredCodec = -1
+        configuredSamplesPerFrame = -1
     }
 
     @Synchronized
-    fun start() {
-        if (serverHandle != 0L) NativeBridge.nativeServerAudioStart(serverHandle)
+    fun start(): Boolean {
+        val handle = serverHandle
+        if (handle == 0L) return false
+        if (started) return true
+        CrashDiagnostics.event("AUDIO", "start codec_output")
+        started = safely("start") { NativeBridge.nativeServerAudioStart(handle) }
+        return started
     }
 
+    /**
+     * Used only after a confirmed long disconnection or service shutdown.
+     * A track-change teardown never calls this method.
+     */
     @Synchronized
     fun stop() {
-        if (serverHandle != 0L) NativeBridge.nativeServerAudioStop(serverHandle)
+        val handle = serverHandle
+        if (handle == 0L || !started) return
+        CrashDiagnostics.event("AUDIO", "stop confirmed_long_disconnect_or_shutdown")
+        safely("stop") {
+            NativeBridge.nativeServerAudioStop(handle)
+            true
+        }
+        started = false
     }
 
     @Synchronized
-    fun setFormat(codecType: Int, samplesPerFrame: Int) {
-        if (serverHandle != 0L) {
-            NativeBridge.nativeServerAudioFormat(serverHandle, codecType, samplesPerFrame)
+    fun setFormat(codecType: Int, samplesPerFrame: Int): Boolean {
+        val handle = serverHandle
+        if (handle == 0L) return false
+        if (!isSupportedFormat(codecType, samplesPerFrame)) {
+            CrashDiagnostics.event(
+                "AUDIO_ERROR",
+                "invalid_format_ignored codec=$codecType samples_per_frame=$samplesPerFrame",
+            )
+            return false
         }
+        if (codecType == configuredCodec && samplesPerFrame == configuredSamplesPerFrame) {
+            return true
+        }
+        CrashDiagnostics.event("AUDIO", "format codec=$codecType samples_per_frame=$samplesPerFrame")
+        val applied = safely("format") {
+            NativeBridge.nativeServerAudioFormat(handle, codecType, samplesPerFrame)
+            true
+        }
+        if (applied) {
+            configuredCodec = codecType
+            configuredSamplesPerFrame = samplesPerFrame
+        }
+        return applied
+    }
+
+    private fun isSupportedFormat(codecType: Int, samplesPerFrame: Int): Boolean = when (codecType) {
+        CODEC_ALAC -> samplesPerFrame in 32..4_096
+        CODEC_AAC_LC -> samplesPerFrame == 960 || samplesPerFrame == 1_024
+        CODEC_AAC_ELD -> samplesPerFrame == 480 || samplesPerFrame == 512
+        else -> false
+    }
+
+    private inline fun safely(operation: String, block: () -> Boolean): Boolean =
+        try {
+            block()
+        } catch (failure: Throwable) {
+            Log.e(TAG, "Native audio $operation contained", failure)
+            CrashDiagnostics.event("AUDIO_ERROR", "$operation ${failure.javaClass.name}: ${failure.message}")
+            false
+        }
+
+    companion object {
+        private const val TAG = "C3MediaAudio"
+        // Stability is more important than latency on the Android 5/x86 K00E.
+        // These settings select the software codec path proven in 1.8.12 and
+        // avoid realtime/vendor-codec paths that can abort the whole process.
+        private const val NETWORK_CUSHION_MS = 2_000
+        private const val OUTPUT_BUFFER_FRAMES = 8_192
+        private const val CODEC_ALAC = 2
+        private const val CODEC_AAC_LC = 4
+        private const val CODEC_AAC_ELD = 8
     }
 }

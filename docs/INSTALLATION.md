@@ -21,16 +21,16 @@ O aplicativo abre em paisagem, oculta as barras do Android e volta a iniciar ap�
 
 O aplicativo tenta criar a rede abaixo:
 
-- Rede: `Citroen-C3`
+- Rede: `Citroen C3`
 - Senha: `C3Media26`
 
 Conecte o iPhone a essa rede. Se o firmware não permitir criar o ponto de acesso automaticamente, abra o menu técnico e configure o ponto de acesso do tablet manualmente. Outra opção é colocar iPhone e tablet na mesma rede Wi-Fi.
 
 ### Manter os dados móveis do iPhone
 
-O iOS normalmente tenta usar a rede Wi-Fi como rota de internet. Como `Citroen-C3` é uma rede local, configure-a uma vez para não substituir a rota dos dados móveis:
+O iOS normalmente tenta usar a rede Wi-Fi como rota de internet. Como `Citroen C3` é uma rede local, configure-a uma vez para não substituir a rota dos dados móveis:
 
-1. No iPhone, abra **Ajustes → Wi-Fi → ⓘ** ao lado de `Citroen-C3`.
+1. No iPhone, abra **Ajustes → Wi-Fi → ⓘ** ao lado de `Citroen C3`.
 2. Em **Configurar IP**, escolha **Manual**.
 3. Use IP `192.168.43.2` e máscara `255.255.255.0`.
 4. Deixe **Roteador** vazio e mantenha **Configurar DNS** em **Automático**.
