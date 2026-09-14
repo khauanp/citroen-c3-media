@@ -41,6 +41,18 @@ class DmapParserTest {
         assertTrue(DmapParser.parse(malformed).isEmpty())
     }
 
+    @Test
+    fun rejectsOversizedMetadataWithoutAllocatingPayloadCopies() {
+        assertTrue(DmapParser.parse(ByteArray(256 * 1024 + 1)).isEmpty())
+    }
+
+    @Test
+    fun limitsDeeplyNestedContainers() {
+        var nested = tag("minm", "Safe".toByteArray(Charsets.UTF_8))
+        repeat(12) { nested = tag("mlit", nested) }
+        DmapParser.parse(nested)
+    }
+
     private fun tag(name: String, payload: ByteArray): ByteArray {
         return ByteBuffer.allocate(8 + payload.size).order(ByteOrder.BIG_ENDIAN)
             .put(name.toByteArray(Charsets.US_ASCII))
