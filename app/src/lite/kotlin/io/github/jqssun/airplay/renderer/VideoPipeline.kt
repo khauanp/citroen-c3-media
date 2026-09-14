@@ -82,7 +82,16 @@ class VideoPipeline {
             running = false
             lock.notifyAll()
         }
-        thread?.join()
+        val retiring = thread
+        try {
+            retiring?.join(RELEASE_JOIN_MS)
+        } catch (failure: Throwable) {
+            Log.w(TAG, "Video thread join contained", failure)
+        }
+        if (retiring?.isAlive == true) {
+            Log.w(TAG, "Video thread did not stop in time; interrupting")
+            try { retiring.interrupt() } catch (_: Throwable) {}
+        }
         thread = null
     }
 
@@ -90,7 +99,7 @@ class VideoPipeline {
         try {
             _initEgl()
             _initGl()
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.e(TAG, "GL init failed", e)
             synchronized(lock) { running = false; lock.notifyAll() }
             return
@@ -293,6 +302,7 @@ class VideoPipeline {
     }
 
     companion object {
+        private const val RELEASE_JOIN_MS = 1_500L
         private const val TAG = "VideoPipeline"
 
         private val POSITIONS = floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f)

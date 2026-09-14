@@ -31,8 +31,8 @@ android {
         applicationId = "com.c3media.dashboard"
         minSdk = 21
         targetSdk = 28
-        versionCode = 10200
-        versionName = "1.2.0"
+        versionCode = 10821
+        versionName = "1.8.21"
 
         externalNativeBuild {
             cmake {
@@ -80,6 +80,13 @@ android {
 
     lint {
         disable += setOf("ExpiredTargetSdkVersion", "ChromeOsAbiSupport")
+    }
+
+    testOptions.unitTests.all {
+        it.testLogging {
+            showStandardStreams = true
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 
     sourceSets["main"].apply {

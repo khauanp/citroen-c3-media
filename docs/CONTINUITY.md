@@ -1,5 +1,410 @@
 # Continuidade do projeto
 
+## Recuperação física — 11 de setembro de 2026 — 1.8.15
+
+Resultado real da 1.8.14 no K00E: o C3 Link abriu normalmente no iPhone, mas o
+aplicativo do tablet entrou em loop antes de exibir a interface. Como a única
+integração de abertura nova era o banco MBTiles, essa camada foi retirada do
+caminho de inicialização.
+
+A recuperação 1.8.15 parte novamente da 1.8.11, cuja abertura foi confirmada no
+hardware. Mantém somente a tolerância de 12 segundos da mídia 1.8.12, não inclui
+os controles do tablet e não copia, inicializa nem referencia `C3MbTilesStore`.
+O mapa volta temporariamente ao renderizador raster anterior, preservando rota,
+radar, velocidade, limite, tema diurno/noturno e proteção térmica.
+
+Critérios de liberação: todas as classes de inicialização, rota, mapa e tiles
+devem ser idênticas à 1.8.11; as classes estáveis de mídia devem corresponder à
+1.8.12; nenhum marcador MBTiles pode existir no APK; recursos e bibliotecas
+nativas devem permanecer inalterados. A integração MBTiles só poderá retornar
+depois de testada isoladamente fora da inicialização do K00E.
+
+Resultado de compilação e recuperação:
+
+- GitHub Actions Android #60: sucesso no commit remoto
+  `c725e03624a095aceb9dadd3b2d1af5de6a3c6a3`;
+- passaram os testes Kotlin/API 21, a remontagem apktool, a comparação da
+  abertura/mapa com a 1.8.11, a comparação da mídia com a 1.8.12 e a proibição
+  integral de MBTiles no APK;
+- o backup privado específico da sequência 1.8.2–1.8.14 não estava disponível
+  no armazenamento atual; para permitir a recuperação imediata, o APK foi
+  assinado com a chave privada preservada da 1.4.0, certificado SHA-256
+  `80676fc4cbaeebabd9f1f66dd1132bc988e1fd27af25116498fa24d1c4aa90af`;
+- por ser um certificado diferente, é necessário desinstalar a 1.8.14 antes de
+  instalar este APK 1.8.15; depois disso, as próximas atualizações poderão usar
+  novamente a mesma chave preservada;
+- APK assinado SHA-256
+  `35e69a9ee5bc8dbd416bed976bb5a5748229123d2dc03ea61f6b406cc135879c`.
+
+## Checkpoint físico — 11 de setembro de 2026 — preparar 1.8.14
+
+Resultado real da 1.8.13 no K00E:
+
+- todas as trocas de música passaram a encerrar o aplicativo;
+- os controles na tela foram rejeitados e devem ser removidos por completo;
+- a base desejada para mídia é a 1.8.12, sem desenho, toque ou integração nova
+  dos controles do tablet;
+- rede, tema automático, temperatura e demais funções aceitas permanecem
+  congeladas.
+
+Nova integração de mapa autorizada:
+
+1. O `.mbtiles` será usado como banco SQLite persistente de tiles já validados.
+   Um mapa regional raster completo dentro do APK seria grande demais para o
+   K00E e não conteria trânsito em tempo real.
+2. O IPA solicitará somente tiles ausentes ou vencidos; o tablet os gravará de
+   forma atômica no MBTiles e continuará usando o último tile válido durante a
+   atualização, evitando quadros vazios.
+3. A renderização seguirá as referências enviadas: cartão de manobra, rota em
+   alto contraste, velocímetro, placa de limite e radares; a paleta acompanha o
+   modo diurno/noturno já existente.
+4. A rota restante será destacada e o caminho já percorrido ficará mais escuro.
+5. Trânsito/radar/velocidade/limite são sobreposições dinâmicas. MBTiles guarda
+   o mapa-base; não será apresentado como fonte de trânsito ao vivo.
+
+Critérios antes da entrega: build API 21, ausência de controles de mídia no
+Dashboard, mídia igual à 1.8.12, teste de leitura/escrita MBTiles, prova de
+fallback sem tela preta, testes Swift, APK assinado e IPA ARM64 empacotado.
+
+Resultado de implementação e empacotamento:
+
+- o patch Android 1.8.14 parte da 1.8.11, reaplica somente a tolerância de 12 s
+  da 1.8.12 e deliberadamente não executa os patches de controles 1.8.12/1.8.13;
+- `DashboardView.onTouchEvent` e `MainActivity` foram comparados com a 1.8.11
+  sem controles; não existe desenho `drawPlayerControls` nem ponte
+  `dispatchMediaKey` no serviço final;
+- `DacpController` e `RadioMediaSession` são os binários compilados das classes
+  restauradas da 1.8.12;
+- `c3-map.mbtiles` usa esquema MBTiles/TMS, WAL, gravação transacional, validação
+  PNG 256 x 256 e limite de 256 MB; o diretório raster passa de `v2` para `v3`
+  para não reler quadrados pretos antigos e mantém apenas tiles novos como
+  fallback durante atualização;
+- o modo diurno deixa o mapa-base sem película; o modo noturno aplica a película
+  escura antes de desenhar rota, radar e cartões;
+- o C3 Link transmite `routeProgressIndex` calculado sobre a rota MapKit e o
+  tablet escurece somente os segmentos já percorridos;
+- GitHub Actions Android #58: sucesso no commit remoto
+  `ed902fe353762bbeacd7ca83ff82841a9f2cad4b`, incluindo a geração limpa do
+  cache raster;
+- GitHub Actions iPhone #49: testes Swift, compilação ARM64, versão 1.8.14 build
+  14 e empacotamento do IPA: sucesso;
+- APK assinado com o mesmo certificado das versões 1.8.2–1.8.13, SHA-256
+  `47929eb7ad27bfa4b801ebe4358761b9214cec618a6dff9098e7ca89cfc47213`;
+- IPA sem assinatura SHA-256
+  `e1d612774d46ef1e5eb37ea7cca4587a64168c7b49da804edead2134c97c0bbd`.
+
+Limite honesto da validação: CI comprova código, protocolo e empacotamento, mas
+não reproduz a GPU, Wi-Fi ou sessão AirPlay do K00E real. O primeiro teste deve
+ser parado: duas transições automáticas de faixa, uma troca pela Central de
+Controle e movimentação curta do mapa. Trânsito ao vivo não faz parte do
+MBTiles; radar, limite, velocidade e rota continuam vindo do iPhone.
+
+## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.13
+
+Resultado real da 1.8.12 no K00E:
+
+- o encerramento entre faixas automáticas aparentemente foi eliminado;
+- restam encerramentos raros durante mudança manual pela Central de Controle;
+- anterior, play/pause e próxima aparecem e respondem ao toque, mas nenhum
+  comando controla o iPhone;
+- todo o restante foi aceito e permanece congelado.
+
+Diagnóstico e escopo desta revisão:
+
+1. A 1.8.12 ainda cria uma `MediaSession` e publica `PlaybackState` no framework
+   de mídia do Android 5. Como o usuário usa AUX e não precisa do tablet como
+   player AVRCP do rádio, essa publicação será removida; somente os receptores
+   de teclas Bluetooth/HID serão mantidos.
+2. O comando da tela chega ao serviço, mas o `DacpController` depende apenas da
+   descoberta NSD. No Android 5 em modo hotspot esse caminho pode não encontrar
+   o serviço `_dacp._tcp` anunciado pelo iPhone.
+3. A resolução DACP passará a normalizar `DACP-ID`, tentar resolução direta pelo
+   nome `iTunes_Ctrl_<id>` e usar descoberta NSD como fallback, preservando e
+   reenviando o comando pendente depois da resolução.
+4. Erros do NSD/HTTP continuarão isolados fora da thread da interface; nenhuma
+   falha de controle poderá encerrar o receptor AirPlay.
+
+Partes congeladas: mapa, rota, tiles, rede `Citroen C3`, áudio nativo, buffers,
+tema automático, limites térmicos, app do iPhone e aparência da 1.8.12.
+
+Critérios: build API 21, prova de ausência de `MediaSession`/`PlaybackState`,
+prova dos dois caminhos DACP e preservação byte a byte do escopo congelado.
+
+Resultado de implementação e empacotamento:
+
+- GitHub Actions Android #50: sucesso no commit
+  `ae6380557ec26a44fa143a6f11d2a134933987c8`;
+- classes Kotlin Android 5 e testes unitários compilaram sem erro;
+- APK reconstruído desde a base 1.8.1 e comparado com a 1.8.12;
+- `MediaSession` e `PlaybackState` foram removidos do caminho de teclas;
+- anterior, próximo e `playpause` foram encontrados no bytecode DACP final;
+- mapa, rota, tiles, rede `Citroen C3`, tema, térmica, interface, recursos e
+  bibliotecas nativas passaram na trava de preservação;
+- APK assinado SHA-256:
+  `b62674b29392c3109049b06c053649debcf70935a9f270b28f73d3bb4451ef34`;
+- permanece necessário validar fisicamente no K00E os três botões e repetir
+  trocas manuais pelo Centro de Controle durante uma transição de faixa.
+
+## Checkpoint físico — 10 de setembro de 2026 — preparar 1.8.12
+
+Resultado real da 1.8.11 no K00E:
+
+- troca manual de faixas usando somente música ficou estável;
+- com Waze aberto e o iPhone em paisagem, a passagem automática entre faixas
+  ainda pode encerrar o aplicativo do tablet;
+- imediatamente antes do encerramento, o painel muda para `PAUSADO` durante o
+  intervalo silencioso entre a faixa antiga e a nova;
+- os métodos DACP de anterior, play/pause e próxima existem e chegam ao serviço,
+  mas a tela atual não desenha os controles nem trata seus toques;
+- o mapa/rota e o novo visual foram aceitos e ficam congelados nesta revisão.
+
+Diagnóstico confirmado no APK 1.8.11:
+
+1. O watchdog de áudio transforma apenas 3,5 s sem amostras em pausa real e
+   publica `PlaybackState.STATE_PAUSED` imediatamente na `MediaSession` do
+   Android 5. Essa transição coincide exatamente com o encerramento observado.
+2. A desmontagem definitiva da sessão já tem uma margem separada de 15 s; logo,
+   o evento de 3,5 s não prova desconexão e deve ser tratado como transição de
+   faixa/interrupção transitória.
+3. O `DashboardView` do APK contém a infraestrutura dos comandos, porém perdeu
+   tanto o desenho dos três botões quanto as áreas de toque.
+4. O receptor legado aceita `ACTION_MEDIA_BUTTON`, mas controles Bluetooth HID
+   podem entregar `KeyEvent` diretamente à Activity. Os dois caminhos precisam
+   convergir para o mesmo DACP enviado ao iPhone.
+
+Escopo autorizado para 1.8.12:
+
+- manter o estado reproduzindo durante um intervalo transitório entre faixas e
+  só aceitar pausa por silêncio após uma margem segura;
+- não publicar pausa transitória ao subsistema de mídia antigo;
+- restaurar controles visíveis de anterior, play/pause e próxima abaixo das
+  informações da música;
+- receber play/pause, próxima e anterior via MediaSession, broadcast legado e
+  `KeyEvent` HID da Activity, sempre com apenas um comando DACP por acionamento;
+- não alterar mapa, rota, tiles, rede `Citroen C3`, tema ou limites térmicos;
+- documentar, validar, versionar e enviar cada etapa antes do pacote final.
+
+Teste físico obrigatório: repetir duas transições automáticas com Waze em
+paisagem, testar os três botões na tela e, quando disponível, testar o controle
+universal Bluetooth. Compilação automatizada não substitui esse teste no carro.
+
+Resultado de implementação e empacotamento:
+
+- GitHub Actions `Build K00E 1.8.12 stable controls APK`, execução 46: sucesso;
+- Kotlin/API 21, reconstrução apktool e verificador de escopo: sucesso;
+- silêncio transitório elevado de 3,5 s para 12 s; a `MediaSession` aplica uma
+  segunda margem de 12 s antes de publicar `STATE_PAUSED` ao Android antigo;
+- nova amostra de áudio cancela a pausa pendente sem reiniciar o receptor;
+- controles de tela chamam os mesmos métodos DACP já usados pelo serviço;
+- MediaSession, broadcast legado e teclas HID 79/85/87/88/126/127 convergem
+  para um único despachante, ignorando repetição de tecla;
+- métodos de mapa/rota/tile, recursos, bibliotecas, rede, tema e política térmica
+  foram confirmados idênticos à 1.8.11;
+- APK assinado com v1/v2/v3 e o certificado das versões 1.8.2–1.8.11;
+- APK final SHA-256
+  `0bfe38435d95f2b06dab0fb3f91f9be1ff13339c6b36be1546aa06c1674d4e8d`.
+
+## Checkpoint físico — 9 de setembro de 2026 — preparar 1.8.11
+
+Base funcional informada pelo usuário: 1.8.9. A manutenção será construída sobre
+a correção de mídia isolada da 1.8.10, ainda sem alterar o mapa aceito nem o
+hotspot `Citroen C3`.
+
+Falhas físicas a eliminar no caminho iPhone → tablet:
+
+1. o processo do tablet ainda pode encerrar entre o fim de uma faixa e o início
+   da próxima;
+2. também há encerramentos ao trocar música pela Central de Controle, ao receber
+   ligação/notificação e quando o iPhone muda de orientação;
+3. o usuário agora usa cabo auxiliar tablet → rádio. Portanto, esta revisão não
+   deve alterar Bluetooth/A2DP do carro nem atribuir o defeito restante a ele;
+4. a sessão AirPlay precisa sobreviver a pausa, retomada, troca de metadados e
+   reconfiguração do emissor sem destruir o serviço.
+
+Correção de mídia já isolada na 1.8.10 e incorporada nesta revisão:
+
+- apenas uma `MediaSession` no Android 5; o `RemoteControlClient` concorrente foi
+  removido;
+- nenhuma capa ou `TrackInfo` é publicada/referenciada pela sessão do rádio;
+- atualização de estado é serializada, reduzida a tipos primitivos e limitada;
+- mudança do token `Active-Remote` preserva o endpoint DACP já resolvido;
+- durante navegação, capa nova não é decodificada junto do cache de tiles;
+- margem de entrada AirPlay de 1 segundo, preservando a saída de 8192 frames.
+
+Novos requisitos autorizados para 1.8.11:
+
+- tema diurno automático entre 07:00 e 18:59, com paleta clara e brilho máximo;
+- tema noturno atual fora desse intervalo;
+- transição avaliada pelo relógio local do tablet, sem depender de internet;
+- proteção térmica elevada com cautela de 43 °C para 45 °C e recuperação em
+  41 °C, evitando oscilações perto do limite;
+- em espera, o brilho mínimo e o desenho de standby continuam inalterados.
+
+Escopo congelado e critérios de prova:
+
+- geometria, rota, recorte, rotação, transporte e cache do mapa devem ser
+  idênticos à versão aceita;
+- `Citroen C3`, bibliotecas nativas, recursos, assets e protocolo iPhone não
+  podem mudar;
+- a única mudança visual permitida é a troca automática da paleta já existente;
+- o build deve provar 07:00 inclusivo, 19:00 exclusivo, 45/41 °C e histerese;
+- o APK deve usar o mesmo certificado das versões 1.8.2–1.8.10.
+
+Observação térmica: a ASUS recomenda ambiente de até 35 °C para a família MeMO
+Pad. Como a telemetria disponível mede a bateria e o aparelho pode estar
+carregando dentro do painel, 45 °C foi escolhido como aumento máximo prudente;
+não será usado 46 °C ou mais nesta revisão.
+
+Resultado de build e empacotamento:
+
+- GitHub Actions `Build K00E 1.8.11 stable daylight APK` execução 41: sucesso;
+- testes Kotlin de fronteira 06/07 h, 18/19 h e histerese 45/41 °C: sucesso;
+- reconstrução canônica e comparação dos métodos de mapa/rota/tile: sucesso;
+- mídia, rede, recursos e bibliotecas idênticos à manutenção isolada 1.8.10;
+- APK final assinado com esquemas v1/v2/v3 e certificado SHA-256
+  `74:E3:33:A6:A3:74:FD:41:D5:C6:FA:84:92:D5:E6:5D:D6:A2:CC:CE:6D:32:0A:27:DB:32:F7:66:D8:1C:60:DF`;
+- APK final SHA-256
+  `164ae582607c10dd906352804fac5c4e83d38d5f2fbd690ee2ad532ef6902c1b`.
+
+Teste físico obrigatório antes de considerar o defeito encerrado:
+
+1. trocar dez faixas pela Central de Controle do iPhone;
+2. deixar duas faixas terminarem e avançarem automaticamente;
+3. repetir com o Waze aberto, uma notificação e uma ligação;
+4. girar o iPhone durante a reprodução;
+5. confirmar que o C3 Media permanece aberto e a saída auxiliar continua ativa;
+6. conferir modo claro entre 07:00–18:59 e modo escuro a partir de 19:00.
+
+## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.10
+
+Resultado real da 1.8.9:
+
+- hotspot corrigido e exibido como `Citroen C3`;
+- mapa/visual da 1.8.8 aceitos e novamente congelados;
+- áudio ainda interrompe, sobretudo com Waze aberto e com o iPhone no suporte
+  imediatamente acima do rádio Bluetooth;
+- o cronômetro congela junto do som e depois avança, indicando falta de pacotes
+  ou interrupção/reabertura da sessão, não apenas falha visual;
+- trocar a faixa pela Central de Controle do iPhone ainda pode encerrar o app.
+
+Diagnóstico da 1.8.9:
+
+1. O suporte coloca o transmissor Wi-Fi 2,4 GHz do iPhone muito perto do
+   receptor Bluetooth 2,4 GHz do rádio. Software pode absorver rajadas curtas,
+   mas não elimina saturação física contínua; o teste final também deve ser
+   repetido com o telefone afastado do rádio.
+2. A 1.8.9 registrava simultaneamente `MediaSession` e
+   `RemoteControlClient`. No Android 5 isso publica dois players AVRCP
+   concorrentes e o caminho antigo é acionado exatamente nas mudanças de faixa.
+3. `RadioMediaSession` carregava `TrackInfo` (incluindo Bitmap) até a thread
+   do rádio e republicava metadados no Bluetooth. A 1.8.10 envia somente estado
+   primitivo de transporte; título/capa continuam no painel.
+4. Se o `Active-Remote` mudava mantendo o mesmo DACP ID, o endpoint resolvido
+   era descartado e o Android NSD reiniciado durante a troca de faixa. A 1.8.10
+   preserva o endpoint e apenas troca o token válido.
+5. Com navegação ativa, capas novas deixam de ser decodificadas. Isso evita pico
+   de bitmap junto ao cache de tiles sem alterar mapa, rota ou aparência.
+6. A margem AirPlay passa de 600 ms para 1000 ms. Os 8192 frames de saída A2DP
+   são preservados.
+
+Critérios obrigatórios da 1.8.10:
+
+- nenhuma classe de mapa/rota/tile/DashboardView pode diferir da 1.8.8 aceita;
+- nenhum `RemoteControlClient` ou `MediaMetadata` pode existir no caminho do
+  rádio;
+- `MEDIA_BUTTON`, próxima/anterior e DACP continuam presentes;
+- hotspot continua literalmente `Citroen C3`;
+- recursos, assets e bibliotecas nativas permanecem idênticos;
+- APK precisa compilar, reconstruir, instalar sobre a 1.8.9 e usar o mesmo
+  certificado.
+
+## Checkpoint físico — 28 de agosto de 2026 — preparar 1.8.9
+
+Base obrigatória: APK 1.8.8. O mapa novo foi aceito visualmente e fica
+congelado: nenhum código, recurso, configuração ou transporte do mapa pode ser
+alterado na manutenção 1.8.9.
+
+Falhas confirmadas no K00E real:
+
+1. O áudio ainda engasga usando somente música e piora quando o Waze concorre
+   no iPhone. A intensidade muda conforme posição/local e proximidade do rádio,
+   compatível com contenção entre Wi-Fi 2,4 GHz (AirPlay) e Bluetooth A2DP.
+2. Durante o engasgo, o cronômetro da música também congela e depois salta
+   alguns segundos. Isso prova que não é apenas um erro visual do contador;
+   existe bloqueio/atraso de processamento ou interrupção do fluxo recebido.
+3. Ao trocar de faixa manualmente ou no fim automático da música, sobretudo com
+   Waze aberto, o aplicativo do tablet fecha. A troca de metadados/capa e a
+   desmontagem/reabertura do áudio precisam ser tratadas como operações
+   concorrentes e não podem destruir a sessão ativa.
+4. Os botões físico/AVRCP de próxima e anterior do rádio continuam sem efeito.
+   A MediaSession da 1.8.8 não é suficiente no Android 5: falta registrar um
+   MediaButtonReceiver explícito e confirmar a entrega DACP ao iPhone.
+5. O ponto de acesso criado pelo tablet aparece como `null`. O APK real fazia
+   uma autoatribuição de `WifiConfiguration.SSID`, preservando o valor nulo em
+   vez de copiar a constante. A rede deve se chamar exatamente `Citroen C3`.
+
+Escopo autorizado para 1.8.9:
+
+- estabilizar recepção/saída de áudio e espelhamento sob contenção de rádio;
+- impedir corrida/falha fatal durante troca de faixa e mudança de metadados;
+- capturar NEXT/PREVIOUS/PLAY_PAUSE do rádio no Android 5 e encaminhar por DACP;
+- preservar interface/player real da 1.8.1;
+- preservar byte a byte o mapa da 1.8.8;
+- manter chave de assinatura fora do GitHub e o PR em rascunho até teste físico.
+
+Critérios de validação antes da entrega:
+
+- verificador recusa qualquer diferença nos arquivos do mapa entre 1.8.8 e
+  1.8.9;
+- teste automatizado de rajadas de troca de faixa não fecha o serviço;
+- descarte tardio de capa nunca recicla bitmap que ainda possa ser desenhado;
+- áudio usa margem real tanto na entrada AirPlay quanto na saída A2DP;
+- media buttons são recebidos mesmo no caminho legado do Android 5;
+- `WifiConfiguration.SSID` recebe literalmente `Citroen C3`, sem autoatribuição;
+- APK instala sobre 1.8.8 com o mesmo certificado.
+
+Checkpoint de implementação:
+
+- `AudioRenderer` passou de 220 ms/saída automática para 600 ms de margem
+  AirPlay e 8192 frames na saída A2DP. A latência extra é deliberada para
+  absorver rajadas e coexistência Wi-Fi/Bluetooth no hardware antigo.
+- `RadioMediaSession` saiu da thread principal: metadados/estado são
+  consolidados numa `HandlerThread`, com exceções do framework isoladas.
+- Foi acrescentado o caminho legado que o rádio antigo espera:
+  `MEDIA_BUTTON` + `registerMediaButtonEventReceiver` +
+  `RemoteControlClient`, mantendo também a `MediaSession` moderna.
+- `DacpController.update` não apaga mais um endpoint já resolvido quando o
+  iPhone repete as mesmas credenciais na troca de faixa; até quatro comandos
+  ficam em fila enquanto o endereço DACP é descoberto.
+- A capa anterior não é mais reciclada explicitamente após um segundo. O GC a
+  libera apenas quando nenhum snapshot do Canvas a referencia, evitando a
+  falha fatal `Canvas: trying to use a recycled bitmap` no Android 5.
+- `apply_android_1_8_9_media.py` sempre reproduz primeiro a 1.8.8 e altera
+  somente mídia/manifesto/versão. `verify_android_1_8_9_media.py` falha se
+  qualquer classe do mapa divergir um byte da 1.8.8.
+- O Gradle local não conseguiu resolver o Android Gradle Plugin 8.9.2 por
+  restrição de rede/cache. O próximo passo obrigatório é compilar no GitHub,
+  corrigir qualquer erro Kotlin e só então montar/assinar o APK.
+- Android CI #26 chegou ao compilador e apontou apenas a sobrecarga histórica
+  `RadioMediaSession.update(track, playing, position)`. Ela foi restaurada
+  sobre a mesma fila assíncrona; nenhum arquivo do mapa foi alterado.
+- Android CI #27 compilou os auxiliares e montou o APK 1.8.9. A prova do mapa
+  comparou smali pré-build com smali redecodificado e detectou a normalização
+  do apktool em `C3LinkPolyline`, não uma alteração funcional. O workflow agora
+  monta e redecodifica também a referência 1.8.8 antes da comparação exata.
+- Android CI #28 passou pela comparação canônica do mapa e parou na busca do
+  método de descarte de capa porque o verificador usava a assinatura smali
+  abreviada. A assinatura completa foi corrigida; o código do app não mudou.
+- Android CI #29 compilou e montou o APK, mas o verificador procurava os nomes
+  Kotlin `KEYCODE_MEDIA_NEXT/PREVIOUS`. Eles são constantes inline e viram
+  números no bytecode. A prova passou a exigir as chamadas finais reais
+  `AirPlayService.nextTrack/previousTrack`, sem alterar o aplicativo.
+- O nome `null` do hotspot foi rastreado no bytecode: `SSID = SSID` dentro do
+  bloco de `WifiConfiguration` lia o próprio campo ainda nulo. A origem agora
+  usa `this.SSID = HotspotController.SSID`; o patch do APK grava diretamente
+  `Citroen C3`. É necessário reiniciar o tablet uma vez após instalar para o
+  Android 5 encerrar o ponto antigo e criar a nova rede.
+
 Atualizado em: 18 de agosto de 2026 — versão 1.2.0
 
 ## Objetivo fechado
@@ -47,7 +452,7 @@ O Android 5 não executa o YouTube Music atual, e o K00E não pode funcionar com
 - `VideoRenderer` + `VideoPipeline`: H.264 com `MediaCodec` e EGL/OpenGL ES 2.
 - `DmapParser` e `TrackInfo`: metadados e capa.
 - `DacpController`: anterior, play/pause e próxima.
-- `HotspotController`: tentativa de ativar `Citroen-C3`, fallback manual e detecção leve de cliente pela tabela ARP.
+- `HotspotController`: cria a rede `Citroen C3`, fallback manual e detecção leve de cliente pela tabela ARP.
 - `EnergyController`/`EnergyPolicy`: espera após 45 s, monitor de bateria/temperatura/memória e proteção térmica a 43 °C.
 - `DashboardView`: splash, espera, home, música, conexão, erro, PIN e painel modular Waze + mídia.
 - `C3MediaApplication`: registro da última falha Java e relançamento do painel.
@@ -68,7 +473,7 @@ O Android 5 não executa o YouTube Music atual, e o K00E não pode funcionar com
 
 O teste real confirmou instalação, inicialização, descoberta AirPlay e espelhamento, e revelou cinco ajustes:
 
-1. A rede local sem internet assumia a rota padrão do iPhone. O procedimento agora usa IP manual sem gateway na rede `Citroen-C3`, preservando o 4G/5G para Waze e streaming.
+1. A rede local sem internet assumia a rota padrão do iPhone. O procedimento agora usa IP manual sem gateway na rede `Citroen C3`, preservando o 4G/5G para Waze e streaming.
 2. A interface ganhou áreas de toque maiores, resposta tátil, cartões de ajuda e controles completos sobre o mapa. O toque sobre o conteúdo do Waze continua impossível por limitação do AirPlay, não do digitalizador do K00E.
 3. Metadados/progresso do YouTube Music não alteram mais `MIRROR` para `AUDIO`. Capas usam RGB_565, limite de 384 px e proteção contra falta de memória.
 4. Fontes pequenas receberam escala de legibilidade automotiva entre 12% e 20%.

@@ -237,31 +237,18 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         service?.clearVideoSurface(holder.surface)
     }
 
-    override fun onPrevious() {
-        service?.previousTrack()
-    }
-
-    override fun onPlayPause() {
-        service?.togglePlayPause()
-    }
-
-    override fun onNext() {
-        service?.nextTrack()
-    }
-
     override fun onConnectionHelp() {
         showMobileDataGuide()
     }
 
-    override fun onMapHelp() {
+    override fun onMirrorHelp() {
         AlertDialog.Builder(this)
-            .setTitle("Waze no tablet")
+            .setTitle("Espelhamento do iPhone")
             .setMessage(
-                "Defina a rota no iPhone e selecione Citroën C3 em Espelhar a Tela. " +
-                    "A imagem será girada e ajustada automaticamente sem esticar.\n\n" +
-                    "Importante: o AirPlay envia imagem e áudio, mas não envia os toques do tablet " +
-                    "de volta ao iPhone. O mapa continua sendo controlado no iPhone; os botões de " +
-                    "música da C3 Media funcionam pelo toque.",
+                "No iPhone, selecione Citroën C3 em Espelhar a Tela. Waze e outros " +
+                    "aplicativos aparecerão com rotação automática e sem esticar.\n\n" +
+                    "O AirPlay envia imagem e áudio, mas não envia os toques do tablet " +
+                    "de volta ao iPhone. Todo controle permanece no celular.",
             )
             .setPositiveButton("Entendi", null)
             .show()
@@ -272,7 +259,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             .setTitle("YouTube Music e Spotify")
             .setMessage(
                 "Abra a música no iPhone, toque no seletor AirPlay e escolha Citroën C3. " +
-                    "A C3 Media continuará aberta e mostrará os controles mesmo durante o Waze.",
+                    "A C3 Media continuará aberta e mostrará os metadados enviados pelo iPhone.",
             )
             .setPositiveButton("OK", null)
             .show()
@@ -298,7 +285,6 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
 
     private fun showTechnicalMenu() {
         val items = arrayOf(
-            "Bluetooth do rádio",
             "Ponto de acesso do tablet",
             "Rede Wi-Fi alternativa",
             "Internet móvel no iPhone",
@@ -310,13 +296,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             .setTitle("Ajustes técnicos")
             .setItems(items) { _, index ->
                 when (index) {
-                    0 -> openSystemSettings(Settings.ACTION_BLUETOOTH_SETTINGS)
-                    1 -> openSystemSettings("android.settings.TETHER_SETTINGS")
-                    2 -> openSystemSettings(Settings.ACTION_WIFI_SETTINGS)
-                    3 -> showMobileDataGuide()
-                    4 -> showConnectionInfo()
-                    5 -> showEnergyInfo()
-                    6 -> showLastCrash()
+                    0 -> openSystemSettings("android.settings.TETHER_SETTINGS")
+                    1 -> openSystemSettings(Settings.ACTION_WIFI_SETTINGS)
+                    2 -> showMobileDataGuide()
+                    3 -> showConnectionInfo()
+                    4 -> showEnergyInfo()
+                    5 -> showLastCrash()
                 }
             }
             .setNegativeButton("Fechar", null)
@@ -332,7 +317,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             append("Endereço do tablet: ${hotspot.accessPointAddress()}\n")
             append("IP sugerido no iPhone: ${hotspot.recommendedIphoneAddress()}\n\n")
             append("Rede local: ${if (status.networkReady) "ativa" else "desconectada"}\n")
-            append("Bluetooth do rádio: ${if (status.radioConnected) "conectado" else "desconectado"}")
+            append("Saída de áudio: cabo auxiliar do tablet")
         }
         AlertDialog.Builder(this)
             .setTitle("Conexão")
@@ -355,8 +340,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             append("Temperatura: ${"%.1f".format(energy.batteryTemperatureC)} °C\n")
             append("Alimentação: ${if (energy.charging) "carregando/conectada" else "bateria"}\n")
             append("Memória livre: ${energy.availableMemoryMb} MB\n\n")
-            append("A central encerra vídeo, áudio e capas quando o iPhone sai da rede. ")
-            append("O receptor mínimo permanece pronto para detectar a volta do aparelho.")
+            append("Após uma desconexão confirmada, a central libera áudio, vídeo e capas. ")
+            append("O receptor AirPlay permanece pronto para a reconexão.")
         }
         AlertDialog.Builder(this)
             .setTitle("Gerenciamento de energia")

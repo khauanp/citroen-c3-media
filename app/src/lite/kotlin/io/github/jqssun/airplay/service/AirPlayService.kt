@@ -22,7 +22,6 @@ import android.view.Surface
 import io.github.jqssun.airplay.C3MediaApplication
 import io.github.jqssun.airplay.MainActivity
 import io.github.jqssun.airplay.R
-import io.github.jqssun.airplay.audio.DacpController
 import io.github.jqssun.airplay.audio.DmapParser
 import io.github.jqssun.airplay.audio.TrackInfo
 import io.github.jqssun.airplay.bridge.NativeBridge
@@ -37,6 +36,10 @@ import io.github.jqssun.airplay.renderer.VideoRenderer
 import java.net.NetworkInterface
 import java.security.SecureRandom
 import java.util.concurrent.CopyOnWriteArraySet
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 
 class AirPlayService : Service(), RaopCallbackHandler {
@@ -53,7 +56,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     private lateinit var audioManager: AudioManager
-    private lateinit var dacp: DacpController
     private var nativeHandle = 0L
     private var nsd: NsdServiceManager? = null
     private var wakeLock: PowerManager.WakeLock? = null
@@ -64,6 +66,16 @@ class AirPlayService : Service(), RaopCallbackHandler {
     @Volatile private var state = MediaState()
     @Volatile private var progressBaseMs = 0L
     @Volatile private var progressBaseAt = 0L
+    private val sessionGeneration = AtomicLong(0L)
+    private val pendingArtwork = AtomicReference<ArtworkJob?>(null)
+    private val artworkWorkerRunning = AtomicBoolean(false)
+    private val artworkGeneration = AtomicLong(0L)
+    private val artworkExecutor = Executors.newSingleThreadExecutor { work ->
+        Thread(work, "C3MediaArtwork").apply {
+            priority = Thread.MIN_PRIORITY
+            isDaemon = true
+        }
+    }
 
     inner class LocalBinder : Binder() {
         val service: AirPlayService get() = this@AirPlayService
@@ -74,7 +86,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onCreate() {
         super.onCreate()
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        dacp = DacpController(this)
         hotspotController = HotspotController(this)
         energyController = EnergyController(
             this,
@@ -108,7 +119,11 @@ class AirPlayService : Service(), RaopCallbackHandler {
 
     fun addListener(listener: MediaStateListener) {
         listeners.add(listener)
-        mainHandler.post { listener.onMediaState(snapshot()) }
+        mainHandler.post {
+            try { listener.onMediaState(snapshot()) } catch (failure: Throwable) {
+                Log.w(TAG, "Initial listener update contained", failure)
+            }
+        }
     }
 
     fun removeListener(listener: MediaStateListener) {
@@ -122,28 +137,17 @@ class AirPlayService : Service(), RaopCallbackHandler {
         return base.copy(positionMs = (progressBaseMs + elapsed).coerceAtMost(base.durationMs))
     }
 
-    fun setVideoSurface(surface: Surface) = videoRenderer.setSurface(surface)
-
-    fun clearVideoSurface(surface: Surface) = videoRenderer.clearSurface(surface)
-
-    fun togglePlayPause() {
-        val positionBeforeChange = snapshot().positionMs
-        val playing = !state.playing
-        updateState(state.copy(playing = playing, positionMs = positionBeforeChange))
-        if (playing) {
-            progressBaseMs = positionBeforeChange
-            progressBaseAt = SystemClock.elapsedRealtime()
-            dacp.play()
-        } else {
-            progressBaseMs = positionBeforeChange
-            progressBaseAt = 0L
-            dacp.pause()
+    fun setVideoSurface(surface: Surface) {
+        try { videoRenderer.setSurface(surface) } catch (failure: Throwable) {
+            Log.e(TAG, "Video surface attach contained", failure)
         }
     }
 
-    fun nextTrack() = dacp.next()
-
-    fun previousTrack() = dacp.previous()
+    fun clearVideoSurface(surface: Surface) {
+        try { videoRenderer.clearSurface(surface) } catch (failure: Throwable) {
+            Log.e(TAG, "Video surface detach contained", failure)
+        }
+    }
 
     private fun waitForHotspot(attempt: Int) {
         if (hotspotController.isActive() || attempt >= 30) {
@@ -220,182 +224,250 @@ class AirPlayService : Service(), RaopCallbackHandler {
     }
 
     override fun onVideoData(data: ByteArray, ntpTimeNs: Long, isH265: Boolean) {
-        energyController.noteActivity()
-        videoRenderer.feedFrame(data, ntpTimeNs, isH265)
+        markSessionActivity()
+        try {
+            videoRenderer.feedFrame(data, ntpTimeNs, isH265)
+        } catch (failure: Throwable) {
+            Log.e(TAG, "Video frame failure contained", failure)
+            try { videoRenderer.resetStream() } catch (_: Throwable) {}
+        }
     }
 
     /** Called by the native audio engine; kept public because JNI resolves it by name. */
     fun onLog(message: String) {
-        Log.d("AirPlayNative", message)
+        try { Log.d("AirPlayNative", message) } catch (_: Throwable) {}
     }
 
     override fun onAudioFormat(ct: Int, spf: Int, usingScreen: Boolean) {
-        energyController.noteActivity()
-        audioManager.mode = AudioManager.MODE_NORMAL
-        @Suppress("DEPRECATION")
-        audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
-        audioRenderer.start()
-        audioRenderer.setFormat(ct, spf)
-        if (usingScreen) {
-            updateState(state.copy(mode = DisplayMode.MIRROR, playing = true, message = "Waze no iPhone"))
-        } else {
+        markSessionActivity()
+        try {
+            audioManager.mode = AudioManager.MODE_NORMAL
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN)
+            audioRenderer.setFormat(ct, spf)
+            audioRenderer.start()
             progressBaseAt = SystemClock.elapsedRealtime()
-            updateState(state.copy(mode = DisplayMode.AUDIO, playing = true, message = "Reproduzindo do iPhone"))
+            updateState(
+                state.copy(
+                    mode = if (usingScreen) DisplayMode.MIRROR else DisplayMode.AUDIO,
+                    playing = true,
+                    message = if (usingScreen) "Espelhamento ativo" else "Reproduzindo do iPhone",
+                ),
+            )
+        } catch (failure: Throwable) {
+            Log.e(TAG, "Audio format transition contained", failure)
         }
     }
 
     override fun onVideoSize(srcW: Float, srcH: Float, w: Float, h: Float) {
-        energyController.noteActivity()
-        if (w > 0 && h > 0) {
+        markSessionActivity()
+        if (w <= 0 || h <= 0) return
+        try {
             videoRenderer.setResolution(w.toInt(), h.toInt())
             updateState(state.copy(mode = DisplayMode.MIRROR, message = "Espelhamento ativo"))
+        } catch (failure: Throwable) {
+            Log.e(TAG, "Video size transition contained", failure)
+            try { videoRenderer.resetStream() } catch (_: Throwable) {}
         }
     }
 
     override fun onVolumeChange(volume: Float) {
         val fraction = if (volume <= -144f) 0f else ((volume + 30f) / 30f).coerceIn(0f, 1f)
         mainHandler.post {
-            val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            val wanted = (fraction * max).roundToInt()
-            if (wanted != audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)) {
-                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, wanted, 0)
+            try {
+                val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val wanted = (fraction * max).roundToInt()
+                if (wanted != audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, wanted, 0)
+                }
+            } catch (failure: Throwable) {
+                Log.w(TAG, "Volume callback contained", failure)
             }
         }
     }
 
-    override fun onClientVolume(): Float {
+    override fun onClientVolume(): Float = try {
         val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         val current = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-        return if (current == 0) -144f else -30f + 30f * current / max
+        if (current == 0) -144f else -30f + 30f * current / max
+    } catch (failure: Throwable) {
+        Log.w(TAG, "Client volume read contained", failure)
+        0f
     }
 
     override fun onAudioTeardown() {
+        // iOS tears RAOP down between naturally advancing tracks, notifications,
+        // Control Center changes and some screen transitions. Keep the native
+        // renderer, audio focus, service and Activity alive. Only publish paused
+        // if no replacement stream/activity arrives for a sustained interval.
+        val token = markSessionActivity()
         progressBaseMs = snapshot().positionMs
         progressBaseAt = 0L
-        updateState(state.copy(playing = false))
+        mainHandler.postDelayed({
+            if (!SessionContinuityPolicy.mayPublishPause(
+                    token,
+                    sessionGeneration.get(),
+                    state.mode == DisplayMode.MIRROR,
+                )) return@postDelayed
+            updateState(state.copy(playing = false, positionMs = progressBaseMs))
+        }, SessionContinuityPolicy.TRANSIENT_PAUSE_GRACE_MS)
     }
 
     override fun onConnectionInit() {
-        energyController.noteActivity()
-        updateState(
-            state.copy(
-                connectionCount = state.connectionCount + 1,
-                message = "iPhone conectado",
-            ),
-        )
+        val token = markSessionActivity()
+        mainHandler.post {
+            if (sessionGeneration.get() < token) return@post
+            updateState(
+                state.copy(
+                    connectionCount = state.connectionCount + 1,
+                    message = "iPhone conectado",
+                ),
+            )
+        }
     }
 
     override fun onConnectionDestroy() {
-        val count = (state.connectionCount - 1).coerceAtLeast(0)
-        if (count == 0) {
-            audioRenderer.stop()
-            videoRenderer.resetStream()
-            dacp.reset()
-            progressBaseMs = 0L
-            progressBaseAt = 0L
-            updateState(
-                MediaState(
-                    serverRunning = nativeHandle != 0L,
-                    mode = DisplayMode.IDLE,
-                    message = "Pronto para conectar",
-                    energy = state.energy,
-                ),
-            )
-        } else {
+        val token = sessionGeneration.incrementAndGet()
+        mainHandler.post {
+            val count = SessionContinuityPolicy.boundedConnectionCount(state.connectionCount, -1)
             updateState(state.copy(connectionCount = count))
+            if (count != 0) return@post
+            mainHandler.postDelayed({
+                if (!SessionContinuityPolicy.mayReleaseSession(
+                    token,
+                    sessionGeneration.get(),
+                    state.connectionCount,
+                )) return@postDelayed
+                try { audioRenderer.stop() } catch (_: Throwable) {}
+                try { videoRenderer.resetStream() } catch (_: Throwable) {}
+                progressBaseMs = 0L
+                progressBaseAt = 0L
+                updateState(
+                    MediaState(
+                        serverRunning = nativeHandle != 0L,
+                        mode = DisplayMode.IDLE,
+                        message = "Pronto para conectar",
+                        energy = state.energy,
+                    ),
+                )
+            }, SessionContinuityPolicy.CONNECTION_GRACE_MS)
         }
     }
 
     override fun onConnectionReset(reason: Int) {
-        Log.w(TAG, "Connection reset: $reason")
+        // A reset is diagnostic only. The receiver remains registered and alive.
+        Log.w(TAG, "Connection reset contained: $reason")
     }
 
     override fun onDisplayPin(pin: String) {
+        markSessionActivity()
         updateState(state.copy(mode = DisplayMode.PIN, pin = pin, message = "Digite este código no iPhone"))
     }
 
     override fun onMetadata(data: ByteArray) {
-        energyController.noteActivity()
-        val info = TrackInfo.fromDmap(DmapParser.parse(data), state.track.coverArt)
-        val duration = if (info.durationMs > 0L) info.durationMs else state.durationMs
-        updateState(
-            state.copy(
-                // Metadata also arrives while the iPhone screen is mirrored. Do not hide
-                // Waze just because YouTube Music changed tracks in the background.
-                mode = audioUpdateMode(),
-                track = info,
-                durationMs = duration,
-                message = if (state.mode == DisplayMode.MIRROR) "Espelhamento ativo" else "Reproduzindo do iPhone",
-            ),
-        )
-    }
-
-    override fun onCoverArt(data: ByteArray) {
-        if (state.energy.thermalLimited || state.energy.availableMemoryMb in 1..LOW_MEMORY_MB) return
-        val art = decodeCoverArt(data) ?: return
-        mainHandler.post {
-            val previous = state.track.coverArt
-            updateState(state.copy(track = state.track.copy(coverArt = art)))
-            if (previous != null && previous !== art && !previous.isRecycled) previous.recycle()
+        markSessionActivity()
+        try {
+            val info = TrackInfo.fromDmap(DmapParser.parse(data), state.track.coverArt)
+            val duration = if (info.durationMs > 0L) info.durationMs else state.durationMs
+            updateState(
+                state.copy(
+                    mode = audioUpdateMode(),
+                    track = info,
+                    durationMs = duration,
+                    message = if (state.mode == DisplayMode.MIRROR) "Espelhamento ativo" else "Reproduzindo do iPhone",
+                ),
+            )
+        } catch (failure: Throwable) {
+            Log.w(TAG, "Malformed metadata ignored", failure)
         }
     }
 
-    override fun onProgress(start: Long, curr: Long, end: Long) {
-        energyController.noteActivity()
-        val position = (((curr - start) / 44100.0) * 1000.0).toLong().coerceAtLeast(0L)
-        val duration = (((end - start) / 44100.0) * 1000.0).toLong().coerceAtLeast(0L)
-        if (duration <= 0L) return
-        progressBaseMs = position
-        progressBaseAt = SystemClock.elapsedRealtime()
-        updateState(
-            state.copy(
-                mode = audioUpdateMode(),
-                positionMs = position,
-                durationMs = duration,
-                playing = true,
-            ),
-        )
+    override fun onCoverArt(data: ByteArray) {
+        markSessionActivity()
+        if (!SessionContinuityPolicy.mayDecodeArtwork(
+                data.size,
+                state.energy.thermalLimited,
+                state.energy.availableMemoryMb,
+            )
+        ) return
+        val generation = artworkGeneration.incrementAndGet()
+        pendingArtwork.set(ArtworkJob(generation, data.copyOf()))
+        scheduleArtworkWorker()
     }
 
-    override fun onDacpId(dacpId: String, activeRemote: String) {
-        dacp.update(dacpId, activeRemote)
+    override fun onProgress(start: Long, curr: Long, end: Long) {
+        markSessionActivity()
+        try {
+            val position = (((curr - start) / 44100.0) * 1000.0).toLong().coerceAtLeast(0L)
+            val duration = (((end - start) / 44100.0) * 1000.0).toLong().coerceAtLeast(0L)
+            if (duration <= 0L) return
+            progressBaseMs = position
+            progressBaseAt = SystemClock.elapsedRealtime()
+            updateState(
+                state.copy(
+                    mode = audioUpdateMode(),
+                    positionMs = position,
+                    durationMs = duration,
+                    playing = true,
+                ),
+            )
+        } catch (failure: Throwable) {
+            Log.w(TAG, "Invalid progress ignored", failure)
+        }
     }
+
+    override fun onDacpId(dacpId: String, activeRemote: String) = Unit
 
     override fun onAudioOnly(audioOnly: Boolean) {
-        if (audioOnly && state.connectionCount > 0) {
-            videoRenderer.resetStream()
-            updateState(state.copy(mode = DisplayMode.AUDIO, message = "Reproduzindo do iPhone"))
-        } else if (!audioOnly && state.connectionCount > 0) {
-            updateState(state.copy(mode = DisplayMode.MIRROR, message = "Espelhamento ativo"))
+        markSessionActivity()
+        try {
+            if (audioOnly) {
+                videoRenderer.resetStream()
+                updateState(state.copy(mode = DisplayMode.AUDIO, playing = true, message = "Reproduzindo do iPhone"))
+            } else {
+                updateState(state.copy(mode = DisplayMode.MIRROR, message = "Espelhamento ativo"))
+            }
+        } catch (failure: Throwable) {
+            Log.e(TAG, "Audio/video mode switch contained", failure)
         }
     }
 
     override fun onVideoPlay(location: String, startPositionSeconds: Float) {
-        energyController.noteActivity()
-        if (nativeHandle != 0L) {
+        markSessionActivity()
+        if (nativeHandle == 0L) return
+        try {
             NativeBridge.nativeUpdatePlaybackInfo(nativeHandle, 0f, 0f, 0f, true)
+        } catch (failure: Throwable) {
+            Log.w(TAG, "Video playback info contained", failure)
         }
     }
 
     override fun onVideoScrub(positionSeconds: Float) = Unit
     override fun onVideoRate(rate: Float) = Unit
+
     override fun onVideoStop() {
-        // iOS closes the mirroring decoder before opening YouTube/YouTube Music.
-        // Keeping that API-21 codec alive caused memory pressure and vendor codec
-        // crashes which could take down the HOME activity as well.
-        videoRenderer.resetStream()
-        val nextMode = if (state.playing || state.track.title.isNotBlank()) {
-            DisplayMode.AUDIO
-        } else {
-            DisplayMode.IDLE
+        markSessionActivity()
+        try { videoRenderer.resetStream() } catch (failure: Throwable) {
+            Log.e(TAG, "Video stop contained", failure)
         }
-        updateState(state.copy(mode = nextMode, message = if (nextMode == DisplayMode.AUDIO) {
-            "Música do iPhone"
-        } else {
-            "Pronto para conectar"
-        }))
+        val nextMode = if (state.playing || state.track.title.isNotBlank()) DisplayMode.AUDIO else DisplayMode.IDLE
+        updateState(
+            state.copy(
+                mode = nextMode,
+                message = if (nextMode == DisplayMode.AUDIO) "Música do iPhone" else "Pronto para conectar",
+            ),
+        )
     }
-    override fun onVideoSessionPoll() = Unit
+
+    override fun onVideoSessionPoll() {
+        markSessionActivity()
+    }
+
+    private fun markSessionActivity(): Long {
+        val token = sessionGeneration.incrementAndGet()
+        try { energyController.noteActivity() } catch (_: Throwable) {}
+        return token
+    }
 
     private fun audioUpdateMode(): DisplayMode =
         if (state.mode == DisplayMode.MIRROR) DisplayMode.MIRROR else DisplayMode.AUDIO
@@ -408,7 +480,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
                     videoRenderer.resetStream()
                     audioRenderer.stop()
                     progressBaseAt = 0L
-                    val art = state.track.coverArt
                     updateState(
                         state.copy(
                             mode = DisplayMode.STANDBY,
@@ -418,7 +489,6 @@ class AirPlayService : Service(), RaopCallbackHandler {
                             energy = snapshot,
                         ),
                     )
-                    if (art != null && !art.isRecycled) art.recycle()
                 } else {
                     updateState(state.copy(energy = snapshot))
                 }
@@ -445,8 +515,37 @@ class AirPlayService : Service(), RaopCallbackHandler {
         }
     }
 
+    private fun scheduleArtworkWorker() {
+        if (!artworkWorkerRunning.compareAndSet(false, true)) return
+        try {
+            artworkExecutor.execute {
+                try {
+                    while (true) {
+                        val job = pendingArtwork.getAndSet(null) ?: break
+                        val bitmap = decodeCoverArt(job.data) ?: continue
+                        if (!SessionContinuityPolicy.isLatestArtwork(job.generation, artworkGeneration.get())) continue
+                        mainHandler.post {
+                            if (SessionContinuityPolicy.isLatestArtwork(job.generation, artworkGeneration.get())) {
+                                updateState(state.copy(track = state.track.copy(coverArt = bitmap)))
+                            }
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    Log.w(TAG, "Artwork worker failure contained", failure)
+                } finally {
+                    artworkWorkerRunning.set(false)
+                    if (pendingArtwork.get() != null) scheduleArtworkWorker()
+                }
+            }
+        } catch (failure: Throwable) {
+            artworkWorkerRunning.set(false)
+            pendingArtwork.set(null)
+            Log.w(TAG, "Artwork scheduling failure contained", failure)
+        }
+    }
+
     private fun decodeCoverArt(data: ByteArray): android.graphics.Bitmap? {
-        if (data.isEmpty() || data.size > MAX_COVER_BYTES) return null
+        if (!SessionContinuityPolicy.mayDecodeArtwork(data.size, false, 0L)) return null
         return try {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
@@ -493,12 +592,17 @@ class AirPlayService : Service(), RaopCallbackHandler {
             listeners.forEach { listener ->
                 try {
                     listener.onMediaState(current)
-                } catch (_: Exception) {
+                } catch (failure: Throwable) {
+                    Log.w(TAG, "Listener failure contained", failure)
                 }
             }
             if (foregroundStarted) {
-                (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                    .notify(NOTIFICATION_ID, buildNotification())
+                try {
+                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                        .notify(NOTIFICATION_ID, buildNotification())
+                } catch (failure: Throwable) {
+                    Log.w(TAG, "Notification update contained", failure)
+                }
             }
         }
     }
@@ -586,7 +690,9 @@ class AirPlayService : Service(), RaopCallbackHandler {
     override fun onDestroy() {
         listeners.clear()
         energyController.stop()
-        dacp.release()
+        pendingArtwork.set(null)
+        artworkGeneration.incrementAndGet()
+        artworkExecutor.shutdownNow()
         audioRenderer.stop()
         releaseNative()
         videoRenderer.release()
@@ -600,14 +706,14 @@ class AirPlayService : Service(), RaopCallbackHandler {
         super.onTaskRemoved(rootIntent)
     }
 
+    private data class ArtworkJob(val generation: Long, val data: ByteArray)
+
     companion object {
         const val RECEIVER_NAME = "Citroën C3"
         private const val TAG = "C3MediaService"
         private const val CHANNEL_ID = "c3_media_receiver"
         private const val NOTIFICATION_ID = 303
-        private const val MAX_COVER_BYTES = 8 * 1024 * 1024
-        private const val COVER_DECODE_LIMIT = 512
+         private const val COVER_DECODE_LIMIT = 512
         private const val COVER_DISPLAY_LIMIT = 384
-        private const val LOW_MEMORY_MB = 96L
-    }
+       }
 }

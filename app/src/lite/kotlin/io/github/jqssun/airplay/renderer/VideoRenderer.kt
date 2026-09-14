@@ -113,8 +113,8 @@ class VideoRenderer {
                 if (codec == null) startCodec(isH265)
                 _feedToCodec(data, ntpTimeNs)
                 drainOutput()
-            } catch (e: Exception) {
-                Log.w(TAG, "Codec error, resetting", e)
+            } catch (failure: Throwable) {
+                Log.w(TAG, "Codec error contained; waiting for next keyframe", failure)
                 stopCodec()
             }
         }
@@ -191,8 +191,8 @@ class VideoRenderer {
         firstFrameQueued = false
         try {
             _startDecoder(MediaCodec.createDecoderByType(mime), format, s, h265)
-        } catch (e: Exception) {
-            // strict hw decoders reject configs beyond their real limits
+        } catch (e: Throwable) {
+            // Strict hardware decoders reject configs beyond their real limits.
             val sw = _softwareDecoder(mime)?.takeIf {
                 it.getCapabilitiesForType(mime).videoCapabilities
                     ?.isSizeSupported(videoWidth, videoHeight) == true
@@ -207,8 +207,8 @@ class VideoRenderer {
         try {
             c.configure(format, surface, null, 0)
             c.start()
-        } catch (e: Exception) {
-            try { c.release() } catch (_: Exception) {}
+        } catch (e: Throwable) {
+            try { c.release() } catch (_: Throwable) {}
             throw e
         }
         codec = c
@@ -221,13 +221,19 @@ class VideoRenderer {
         _lastOutputFrameNs = 0L
         _ptsBaseUs = Long.MIN_VALUE
         _wallBaseNs = 0L
-        codec?.let {
-            try {
-                it.stop()
-                it.release()
-            } catch (_: Exception) {}
-        }
+        val retiring = codec
         codec = null
+        if (retiring != null) {
+            // Some Android-5 vendor codecs throw from stop(). Release must still
+            // be attempted independently or the next app/orientation switch can
+            // exhaust the codec process and terminate C3 Media.
+            try { retiring.stop() } catch (failure: Throwable) {
+                Log.w(TAG, "Codec stop contained", failure)
+            }
+            try { retiring.release() } catch (failure: Throwable) {
+                Log.w(TAG, "Codec release contained", failure)
+            }
+        }
         firstFrameQueued = false
     }
 
@@ -335,7 +341,7 @@ class VideoRenderer {
                 .firstOrNull { info ->
                     !info.isEncoder && info.supportedTypes.any { it.equals(mime, ignoreCase = true) }
                 }?.getCapabilitiesForType(mime)?.videoCapabilities
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             Log.w(TAG, "Failed to get decoder capabilities", e)
             null
         }
