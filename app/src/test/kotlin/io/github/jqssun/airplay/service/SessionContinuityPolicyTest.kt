@@ -123,4 +123,18 @@ class SessionContinuityPolicyTest {
         }
         assertTrue(SessionContinuityPolicy.isLatestArtwork(generation, generation))
     }
+
+    @Test
+    fun metadataAndHeapPressureAreBounded() {
+        assertFalse(SessionContinuityPolicy.mayParseMetadata(0))
+        assertTrue(SessionContinuityPolicy.mayParseMetadata(4_096))
+        assertFalse(
+            SessionContinuityPolicy.mayParseMetadata(SessionContinuityPolicy.MAX_METADATA_BYTES + 1),
+        )
+
+        val max = 32L * 1024L * 1024L
+        assertTrue(SessionContinuityPolicy.hasHeapHeadroom(max, 16L * 1024L * 1024L, 4L * 1024L * 1024L))
+        assertFalse(SessionContinuityPolicy.hasHeapHeadroom(max, 30L * 1024L * 1024L, 1L * 1024L * 1024L))
+        assertFalse(SessionContinuityPolicy.hasHeapHeadroom(0L, 0L, 0L))
+    }
 }
