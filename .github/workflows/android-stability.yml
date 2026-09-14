@@ -45,5 +45,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: C3-Media-1.8.22-stability-log
-          path: c3-lifecycle-logcat.txt
+          path: |
+            c3-lifecycle-logcat.txt
+            c3-lifecycle-services.txt
+            c3-lifecycle-activities.txt
           if-no-files-found: warn
