@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.graphics.BitmapFactory
 import android.media.AudioManager
 import android.os.Binder
@@ -147,6 +148,35 @@ class AirPlayService : Service(), RaopCallbackHandler {
         try { videoRenderer.clearSurface(surface) } catch (failure: Throwable) {
             Log.e(TAG, "Video surface detach contained", failure)
         }
+    }
+
+    /** Exercises the real native K00E output during debug CI builds. */
+    fun runDebugAudioProbe() {
+        if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) return
+        Thread({
+            try {
+                repeat(30) { cycle ->
+                    val codec = when (cycle % 3) {
+                        0 -> 2 // ALAC
+                        1 -> 4 // AAC-LC
+                        else -> 8 // AAC-ELD
+                    }
+                    val samples = when (codec) {
+                        2 -> 352
+                        4 -> 1024
+                        else -> 480
+                    }
+                    audioRenderer.setFormat(codec, samples)
+                    audioRenderer.start()
+                    Thread.sleep(40L)
+                    if (cycle % 5 == 4) audioRenderer.stop()
+                }
+                audioRenderer.start()
+                Log.i(TAG, "C3_AUDIO_PROBE_PASS")
+            } catch (failure: Throwable) {
+                Log.e(TAG, "C3_AUDIO_PROBE_FAIL", failure)
+            }
+        }, "C3AudioProbe").start()
     }
 
     private fun waitForHotspot(attempt: Int) {

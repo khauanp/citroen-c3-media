@@ -1,4 +1,4 @@
-name: Build K00E 1.8.21 media-only APK
+name: Build K00E 1.8.22 full-screen stable media APK
 
 on:
   push:
@@ -27,7 +27,8 @@ jobs:
       - name: Build and test Android 5 x86 receiver
         run: |
           chmod +x gradlew
-          ./gradlew :app:testReleaseUnitTest :app:assembleRelease --stacktrace
+          python3 tools/verify_android_1_8_22.py
+          ./gradlew :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease --stacktrace
 
       - name: Verify media-only scope
         run: |
@@ -40,6 +41,9 @@ jobs:
             echo "Unexpected ABI in K00E APK"
             exit 1
           fi
+          test "$(unzip -p "$apk" lib/x86/libairplay_native.so | sha256sum | awk '{print $1}')" = "327b381a2719aaa176f70a69d231e3c4671357c4cb0c87be74b99eb183c3e5b5"
+          test "$(unzip -p "$apk" lib/x86/liboboe.so | sha256sum | awk '{print $1}')" = "5541263e80ba3a4471a1372d08d1dd72fc8378d6a90deb598bf07525656c23eb"
+          test "$(unzip -p "$apk" lib/x86/libc++_shared.so | sha256sum | awk '{print $1}')" = "649cf75deda40f5985f316d1cc63cba59466db453e610a14e983e36be0caaa94"
           unzip -p "$apk" classes.dex | strings > build-dex-strings.txt
           for forbidden in             RouteReceiverServer RouteWebViewModule RouteResourceProxy             RouteProxyWebViewClient C3Map C3LinkNavigation MapTile             DacpController RadioMediaSession RadioButtonReceiver NanoHTTPD             waze_webview closeWazeButton; do
             if grep -Fq "$forbidden" build-dex-strings.txt; then
@@ -47,15 +51,15 @@ jobs:
               exit 1
             fi
           done
-          for required in             AirPlayService AudioRenderer VideoRenderer VideoPipeline             HotspotController EnergyController C3MediaApplication             Citroen-C3; do
+          for required in             AirPlayService AudioRenderer VideoRenderer VideoPipeline             HotspotController EnergyController C3MediaApplication             DayNightPolicy drawRotatingArtwork onCloseApp Citroen-C3; do
             grep -Fq "$required" build-dex-strings.txt
           done
           mkdir -p build/final
-          cp "$apk" build/final/C3-Media-1.8.21-K00E-unsigned.apk
+          cp "$apk" build/final/C3-Media-1.8.22-K00E-unsigned.apk
 
       - name: Upload unsigned media-only APK
         uses: actions/upload-artifact@v4
         with:
-          name: C3-Media-1.8.21-K00E-unsigned
-          path: build/final/C3-Media-1.8.21-K00E-unsigned.apk
+          name: C3-Media-1.8.22-K00E-unsigned
+          path: build/final/C3-Media-1.8.22-K00E-unsigned.apk
           if-no-files-found: error

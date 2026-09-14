@@ -31,6 +31,7 @@ import io.github.jqssun.airplay.service.MediaState
 import io.github.jqssun.airplay.service.MediaStateListener
 import io.github.jqssun.airplay.power.EnergyMode
 import io.github.jqssun.airplay.ui.DashboardView
+import io.github.jqssun.airplay.ui.DayNightPolicy
 
 class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
     private lateinit var root: FrameLayout
@@ -56,6 +57,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             if (surfaceView.holder.surface?.isValid == true) {
                 service?.setVideoSurface(surfaceView.holder.surface)
             }
+            if (debugDemoMode == "audio-probe") service?.runDebugAudioProbe()
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -84,7 +86,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
                 WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
                 WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED,
         )
-        window.attributes = window.attributes.apply { screenBrightness = 0.78f }
+        window.attributes = window.attributes.apply { screenBrightness = DayNightPolicy.activeBrightnessNow() }
         buildUi()
         if (intent.getBooleanExtra(C3MediaApplication.EXTRA_WAKE_ANIMATION, false)) {
             dashboard.triggerStartupAnimation()
@@ -146,6 +148,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
                 playing = true,
                 message = "Reproduzindo do iPhone",
             )
+            "audio-probe" -> MediaState(
+                serverRunning = true,
+                connectionCount = 1,
+                mode = DisplayMode.AUDIO,
+                track = TrackInfo(title = "Teste do receptor", artist = "C3 Media"),
+                playing = true,
+                message = "Testando saída de áudio",
+            )
             else -> return
         }
         dashboard.updateMedia(demo)
@@ -163,38 +173,29 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         applyEnergyUi(state)
         val mirror = state.mode == DisplayMode.MIRROR && state.energy.mode != EnergyMode.STANDBY
         if (mirror && surfaceView.visibility != View.VISIBLE) {
-            updateSurfaceLayout(true)
+            updateSurfaceLayout()
             surfaceView.visibility = View.VISIBLE
             surfaceView.holder.surface?.takeIf { it.isValid }?.let { service?.setVideoSurface(it) }
         } else if (!mirror && surfaceView.visibility == View.VISIBLE) {
             surfaceView.holder.surface?.takeIf { it.isValid }?.let { service?.clearVideoSurface(it) }
             surfaceView.visibility = View.INVISIBLE
-            updateSurfaceLayout(false)
+            updateSurfaceLayout()
         } else if (mirror) {
-            updateSurfaceLayout(true)
+            updateSurfaceLayout()
         }
     }
 
-    private fun updateSurfaceLayout(modular: Boolean) {
+    private fun updateSurfaceLayout() {
         val width = root.width
         val height = root.height
         if (width <= 0 || height <= 0) {
-            root.post { updateSurfaceLayout(modular) }
+            root.post { updateSurfaceLayout() }
             return
         }
-        surfaceView.layoutParams = if (modular) {
-            val sx = width / 1280f
-            val sy = height / 800f
-            FrameLayout.LayoutParams((778f * sx).toInt(), (672f * sy).toInt()).apply {
-                leftMargin = (124f * sx).toInt()
-                topMargin = (108f * sy).toInt()
-            }
-        } else {
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            )
-        }
+        surfaceView.layoutParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT,
+        )
     }
 
     private fun applyEnergyUi(state: MediaState) {
@@ -205,7 +206,8 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         } else {
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             window.attributes = window.attributes.apply {
-                screenBrightness = if (mode == EnergyMode.THERMAL_PROTECTION) 0.42f else 0.78f
+                screenBrightness = if (mode == EnergyMode.THERMAL_PROTECTION) 0.42f
+                    else DayNightPolicy.activeBrightnessNow()
             }
             if (lastEnergyMode == EnergyMode.STANDBY) {
                 dashboard.triggerStartupAnimation()
@@ -263,6 +265,12 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             )
             .setPositiveButton("OK", null)
             .show()
+    }
+
+    override fun onCloseApp() {
+        // The explicit close button hides only the dashboard. Keeping the
+        // foreground receiver alive preserves the selected AirPlay output.
+        moveTaskToBack(true)
     }
 
     override fun onTechnicalSettings() {

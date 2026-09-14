@@ -24,8 +24,8 @@ class AudioRenderer {
                 NETWORK_CUSHION_MS,
                 99,
                 OUTPUT_BUFFER_FRAMES,
-                false,
                 true,
+                false,
                 false,
                 false,
             )
@@ -80,7 +80,10 @@ class AudioRenderer {
 
     companion object {
         private const val TAG = "C3MediaAudio"
-        private const val NETWORK_CUSHION_MS = 1_500
+        // Stability is more important than latency on the Android 5/x86 K00E.
+        // These settings select the software codec path proven in 1.8.12 and
+        // avoid realtime/vendor-codec paths that can abort the whole process.
+        private const val NETWORK_CUSHION_MS = 2_000
         private const val OUTPUT_BUFFER_FRAMES = 8_192
     }
 }
