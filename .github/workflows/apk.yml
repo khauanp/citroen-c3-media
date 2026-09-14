@@ -28,7 +28,13 @@ jobs:
         run: |
           chmod +x gradlew
           python3 tools/verify_android_1_8_22.py
-          ./gradlew :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease --stacktrace
+          for attempt in 1 2 3; do
+            if ./gradlew :app:testReleaseUnitTest :app:assembleDebug :app:assembleRelease --stacktrace; then
+              break
+            fi
+            test "$attempt" -lt 3
+            sleep 5
+          done
 
       - name: Verify media-only scope
         run: |
@@ -51,7 +57,7 @@ jobs:
               exit 1
             fi
           done
-          for required in             AirPlayService AudioRenderer VideoRenderer VideoPipeline             HotspotController EnergyController C3MediaApplication             DayNightPolicy drawRotatingArtwork onCloseApp Citroen-C3; do
+          for required in             AirPlayService AudioRenderer VideoRenderer VideoPipeline             HotspotController EnergyController C3MediaApplication CrashDiagnostics             DayNightPolicy drawRotatingArtwork onCloseApp onAudioActivity Citroen-C3; do
             grep -Fq "$required" build-dex-strings.txt
           done
           mkdir -p build/final

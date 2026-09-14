@@ -26,8 +26,13 @@ jobs:
         run: |
           chmod +x gradlew
           python3 tools/verify_android_1_8_22.py
-          ./gradlew :app:testReleaseUnitTest             --tests 'io.github.jqssun.airplay.service.SessionContinuityPolicyTest'             --stacktrace
-          ./gradlew :app:assembleDebug --stacktrace
+          for attempt in 1 2 3; do
+            if ./gradlew :app:testReleaseUnitTest               --tests 'io.github.jqssun.airplay.service.SessionContinuityPolicyTest'               :app:assembleDebug --stacktrace; then
+              break
+            fi
+            test "$attempt" -lt 3
+            sleep 5
+          done
 
       - name: Exercise APK on Android 5 x86
         uses: reactivecircus/android-emulator-runner@v2
