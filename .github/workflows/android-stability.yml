@@ -1,0 +1,82 @@
+name: Android 5 stability battery
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  api21-x86-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout receiver
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Use JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Run session-transition stress tests
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testReleaseUnitTest             --tests 'io.github.jqssun.airplay.service.SessionContinuityPolicyTest'             --stacktrace
+          ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Exercise APK on Android 5 x86
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 21
+          target: default
+          arch: x86
+          profile: Nexus 7
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            set -euo pipefail
+            package="com.c3media.dashboard"
+            component="$package/io.github.jqssun.airplay.MainActivity"
+            apk="app/build/outputs/apk/debug/app-debug.apk"
+            test -f "$apk"
+            adb install -r "$apk"
+            adb logcat -c
+
+            for pass in $(seq 1 80); do
+              adb shell am start -W -n "$component" >/tmp/c3-start.txt
+              grep -Eq 'Status: ok|Activity:' /tmp/c3-start.txt
+              adb shell pidof "$package" >/dev/null
+              adb shell settings put system user_rotation $((pass % 2))
+              if (( pass % 4 == 0 )); then
+                adb shell am send-trim-memory "$package" RUNNING_LOW || true
+              fi
+              adb shell input keyevent KEYCODE_HOME
+            done
+
+            adb shell am start -W -n "$component"
+            adb shell am send-trim-memory "$package" MODERATE || true
+            adb shell pidof "$package" >/dev/null
+            adb logcat -d > c3-lifecycle-logcat.txt
+
+            if grep -E 'FATAL EXCEPTION|Fatal signal|ANR in com\.c3media\.dashboard|Process com\.c3media\.dashboard .* has died' c3-lifecycle-logcat.txt; then
+              echo "Crash or ANR detected during Android 5 lifecycle stress"
+              exit 1
+            fi
+
+            if adb shell run-as "$package" test -f files/last_crash.txt; then
+              echo "Application crash recorder contains a failure"
+              adb shell run-as "$package" cat files/last_crash.txt || true
+              exit 1
+            fi
+
+      - name: Upload diagnostic log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: C3-Media-1.8.21-stability-log
+          path: c3-lifecycle-logcat.txt
+          if-no-files-found: warn
