@@ -241,15 +241,14 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
         showMobileDataGuide()
     }
 
-    override fun onMapHelp() {
+    override fun onMirrorHelp() {
         AlertDialog.Builder(this)
-            .setTitle("Waze no tablet")
+            .setTitle("Espelhamento do iPhone")
             .setMessage(
-                "Defina a rota no iPhone e selecione Citroën C3 em Espelhar a Tela. " +
-                    "A imagem será girada e ajustada automaticamente sem esticar.\n\n" +
-                    "Importante: o AirPlay envia imagem e áudio, mas não envia os toques do tablet " +
-                    "de volta ao iPhone. O mapa continua sendo controlado no iPhone; os botões de " +
-                    "música da C3 Media funcionam pelo toque.",
+                "No iPhone, selecione Citroën C3 em Espelhar a Tela. Waze e outros " +
+                    "aplicativos aparecerão com rotação automática e sem esticar.\n\n" +
+                    "O AirPlay envia imagem e áudio, mas não envia os toques do tablet " +
+                    "de volta ao iPhone. Todo controle permanece no celular.",
             )
             .setPositiveButton("Entendi", null)
             .show()
@@ -260,7 +259,7 @@ class MainActivity : Activity(), SurfaceHolder.Callback, DashboardView.Actions {
             .setTitle("YouTube Music e Spotify")
             .setMessage(
                 "Abra a música no iPhone, toque no seletor AirPlay e escolha Citroën C3. " +
-                    "A C3 Media continuará aberta e mostrará os controles mesmo durante o Waze.",
+                    "A C3 Media continuará aberta e mostrará os metadados enviados pelo iPhone.",
             )
             .setPositiveButton("OK", null)
             .show()
