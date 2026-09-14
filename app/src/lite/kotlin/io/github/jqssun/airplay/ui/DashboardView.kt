@@ -27,7 +27,7 @@ import kotlin.math.min
 class DashboardView(context: Context) : View(context) {
     interface Actions {
         fun onConnectionHelp()
-        fun onMapHelp()
+        fun onMirrorHelp()
         fun onMusicHelp()
         fun onTechnicalSettings()
     }
@@ -145,16 +145,16 @@ class DashboardView(context: Context) : View(context) {
 
         drawHomeIcon(canvas, 66f, 210f, media.mode == DisplayMode.IDLE)
         drawMusicIcon(canvas, 66f, 310f, media.mode == DisplayMode.AUDIO)
-        drawMapIcon(canvas, 66f, 410f, media.mode == DisplayMode.MIRROR)
+        drawMirrorIcon(canvas, 66f, 410f, media.mode == DisplayMode.MIRROR)
         drawConnectionIcon(canvas, 66f, 650f, connection.networkReady, "REDE")
-        drawConnectionIcon(canvas, 66f, 730f, connection.radioConnected, "RÁDIO")
+        drawConnectionIcon(canvas, 66f, 730f, true, "AUX")
     }
 
     private fun drawStatus(canvas: Canvas) {
         text(canvas, "CITROËN C3", 152f, 58f, 17f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, subtitle(), 152f, 84f, 13f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         statusPill(canvas, 884f, 34f, 1018f, 76f, connection.networkReady, connection.networkLabel)
-        statusPill(canvas, 1030f, 34f, 1170f, 76f, connection.radioConnected, if (connection.radioConnected) "Rádio ligado" else "Sem rádio")
+        statusPill(canvas, 1030f, 34f, 1170f, 76f, true, "Cabo AUX")
         text(canvas, clock.format(Date()), 1242f, 65f, 24f, WHITE, Paint.Align.RIGHT, Typeface.DEFAULT_BOLD)
     }
 
@@ -178,11 +178,11 @@ class DashboardView(context: Context) : View(context) {
         step(canvas, 626f, 606f, "3", "Selecione", "Citroën C3")
 
         card(canvas, 816f, 120f, 1258f, 420f, 30f, CARD)
-        text(canvas, "WAZE", 854f, 172f, 14f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        text(canvas, "Rotas na tela", 854f, 222f, 31f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        text(canvas, "Defina a rota no celular e use", 854f, 266f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, "Espelhar a Tela. A navegação", 854f, 292f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, "aparece aqui imediatamente.", 854f, 318f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "ESPELHAMENTO", 854f, 172f, 14f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "Tela do iPhone", 854f, 222f, 31f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "Abra qualquer aplicativo e use", 854f, 266f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "Espelhar a Tela. A imagem gira", 854f, 292f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "e se ajusta sem deformação.", 854f, 318f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         drawRoute(canvas, 1055f, 350f)
 
         card(canvas, 816f, 444f, 1258f, 748f, 30f, CARD)
@@ -190,7 +190,7 @@ class DashboardView(context: Context) : View(context) {
         text(canvas, "YouTube Music", 854f, 546f, 29f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, "e Spotify", 854f, 580f, 29f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, "Toque pelo iPhone. Capa, faixa e", 854f, 626f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
-        text(canvas, "controles aparecem nesta central.", 854f, 652f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
+        text(canvas, "metadados aparecem nesta central.", 854f, 652f, 16f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT)
         drawMusicDisc(canvas, 1160f, 628f)
     }
 
@@ -219,8 +219,8 @@ class DashboardView(context: Context) : View(context) {
         text(canvas, formatTime(duration), 1216f, 437f, 14f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
 
         card(canvas, 166f, 660f, 1216f, 734f, 24f, CARD)
-        statusDot(canvas, 202f, 697f, connection.radioConnected)
-        text(canvas, if (connection.radioConnected) "Áudio sendo enviado ao rádio" else "Conecte o Bluetooth do rádio", 222f, 703f, 16f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        statusDot(canvas, 202f, 697f, true)
+        text(canvas, "Saída de áudio pelo cabo auxiliar", 222f, 703f, 16f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, "O volume do iPhone controla a saída", 1182f, 703f, 14f, MUTED, Paint.Align.RIGHT, Typeface.DEFAULT)
     }
 
@@ -242,8 +242,8 @@ class DashboardView(context: Context) : View(context) {
         paint.color = RAIL
         canvas.drawRoundRect(122f, 18f, 1262f, 90f, 25f, 25f, paint)
         text(canvas, "PAINEL DE VIAGEM", 150f, 62f, 17f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
-        statusDot(canvas, 984f, 53f, connection.radioConnected)
-        text(canvas, if (connection.radioConnected) "Áudio no rádio" else "Sem rádio", 1004f, 60f, 14f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        statusDot(canvas, 984f, 53f, true)
+        text(canvas, "Saída auxiliar", 1004f, 60f, 14f, MUTED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
         text(canvas, clock.format(Date()), 1232f, 62f, 24f, WHITE, Paint.Align.RIGHT, Typeface.DEFAULT_BOLD)
 
         linePaint.color = Color.argb(135, 255, 255, 255)
@@ -252,7 +252,7 @@ class DashboardView(context: Context) : View(context) {
         paint.color = Color.argb(205, 7, 9, 13)
         canvas.drawRoundRect(146f, 130f, 314f, 176f, 19f, 19f, paint)
         statusDot(canvas, 168f, 153f, true)
-        text(canvas, "WAZE AO VIVO", 188f, 160f, 14f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
+        text(canvas, "TELA DO IPHONE", 188f, 160f, 14f, WHITE, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
 
         card(canvas, 918f, 108f, 1262f, 780f, 28f, Color.rgb(18, 21, 28))
         text(canvas, "TOCANDO AGORA", 946f, 148f, 13f, RED, Paint.Align.LEFT, Typeface.DEFAULT_BOLD)
@@ -358,21 +358,13 @@ class DashboardView(context: Context) : View(context) {
         canvas.drawCircle(x + 1f, y + 7f, 6f, linePaint)
     }
 
-    private fun drawMapIcon(canvas: Canvas, x: Float, y: Float, active: Boolean) {
+    private fun drawMirrorIcon(canvas: Canvas, x: Float, y: Float, active: Boolean) {
         iconBackground(canvas, x, y, active)
         linePaint.color = if (active) Color.BLACK else MUTED
         linePaint.strokeWidth = 3f
-        path.reset()
-        path.moveTo(x - 15f, y - 12f)
-        path.lineTo(x - 5f, y - 16f)
-        path.lineTo(x + 6f, y - 11f)
-        path.lineTo(x + 15f, y - 15f)
-        path.lineTo(x + 15f, y + 12f)
-        path.lineTo(x + 5f, y + 16f)
-        path.lineTo(x - 6f, y + 11f)
-        path.lineTo(x - 15f, y + 15f)
-        path.close()
-        canvas.drawPath(path, linePaint)
+        canvas.drawRoundRect(x - 17f, y - 12f, x + 17f, y + 10f, 3f, 3f, linePaint)
+        canvas.drawLine(x - 7f, y + 16f, x + 7f, y + 16f, linePaint)
+        canvas.drawLine(x, y + 10f, x, y + 16f, linePaint)
     }
 
     private fun iconBackground(canvas: Canvas, x: Float, y: Float, active: Boolean) {
@@ -563,12 +555,12 @@ class DashboardView(context: Context) : View(context) {
                 handler.removeCallbacks(settingsLongPress)
                 if (!settingsTriggered && media.mode == DisplayMode.MIRROR) {
                     when {
-                        x in 124f..902f && y in 108f..780f -> touchAction { actions?.onMapHelp() }
+                        x in 124f..902f && y in 108f..780f -> touchAction { actions?.onMirrorHelp() }
                     }
                 } else if (!settingsTriggered && media.mode == DisplayMode.IDLE) {
                     when {
                         x in 146f..792f && y in 120f..748f -> touchAction { actions?.onConnectionHelp() }
-                        x in 816f..1258f && y in 120f..420f -> touchAction { actions?.onMapHelp() }
+                        x in 816f..1258f && y in 120f..420f -> touchAction { actions?.onMirrorHelp() }
                         x in 816f..1258f && y in 444f..748f -> touchAction { actions?.onMusicHelp() }
                     }
                 }
