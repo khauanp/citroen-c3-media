@@ -34,8 +34,8 @@ android {
         applicationId = "com.c3media.dashboard"
         minSdk = 21
         targetSdk = 28
-        versionCode = 10822
-        versionName = "1.8.22"
+        versionCode = 10823
+        versionName = "1.8.23"
     }
 
     buildTypes {
